@@ -1,0 +1,182 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Book and course purchases with UPI transaction details",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Unique order identifier"
+        },
+        "itemType": {
+          "type": "string",
+          "description": "Type of item: book or course_registration"
+        },
+        "itemName": {
+          "type": "string",
+          "description": "Product or track title"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount in INR"
+        },
+        "buyerName": {
+          "type": "string",
+          "description": "Name of the customer or student"
+        },
+        "buyerEmail": {
+          "type": "string",
+          "description": "Email address for receipt and correspondence"
+        },
+        "buyerPhone": {
+          "type": "string",
+          "description": "Contact phone number"
+        },
+        "shippingAddress": {
+          "type": "string",
+          "description": "Physical shipping destination if physical book"
+        },
+        "utrNumber": {
+          "type": "string",
+          "description": "12-digit UPI reference or bank transaction number"
+        },
+        "status": {
+          "type": "string",
+          "description": "Order status: pending_verification, verified, fulfilled, cancelled"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of order creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["orderId", "itemName", "amount", "buyerName", "buyerEmail", "status", "createdAt"]
+    },
+    "PaymentConfig": {
+      "title": "PaymentConfig",
+      "description": "Dynamic UPI recipient configuration managed by Shubham",
+      "type": "object",
+      "properties": {
+        "upiId": {
+          "type": "string",
+          "description": "Recipient UPI VPA identifier (e.g. shubhamkasar@upi)"
+        },
+        "payeeName": {
+          "type": "string",
+          "description": "Merchant or payee display name"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code, defaults to INR"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["upiId", "payeeName"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Student applications, employer inquiries, talk requests, and campus partnerships",
+      "type": "object",
+      "properties": {
+        "submissionId": {
+          "type": "string",
+          "description": "Unique submission reference"
+        },
+        "type": {
+          "type": "string",
+          "description": "student_application, employer_inquiry, talk_request, or college_partner"
+        },
+        "data": {
+          "type": "object",
+          "description": "Payload containing applicant details, track, or company needs"
+        },
+        "status": {
+          "type": "string",
+          "description": "received, reviewing, or connected"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of submission"
+        }
+      },
+      "required": ["submissionId", "type", "data", "status", "createdAt"]
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "Verified student transformation stories, capstone projects, and career outcomes",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique testimonial record identifier"
+        },
+        "studentName": {
+          "type": "string",
+          "description": "Full name of the Codagram fellow"
+        },
+        "cohortTrack": {
+          "type": "string",
+          "description": "Learning program completed"
+        },
+        "currentRole": {
+          "type": "string",
+          "description": "Role and organization"
+        },
+        "quote": {
+          "type": "string",
+          "description": "Authentic testimonial quote on capability vs certificates"
+        },
+        "projectTitle": {
+          "type": "string",
+          "description": "Verified capstone production architecture"
+        },
+        "projectMetrics": {
+          "type": "string",
+          "description": "Quantitative benchmark or achievement"
+        },
+        "skills": {
+          "type": "array",
+          "description": "Core skills mastered"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp"
+        }
+      },
+      "required": ["id", "studentName", "cohortTrack", "quote", "projectTitle"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": {
+        "$ref": "Order"
+      },
+      "description": "Customer purchase orders for books and course cohort seats"
+    },
+    "/settings/{settingId}": {
+      "schema": {
+        "$ref": "PaymentConfig"
+      },
+      "description": "System settings such as active recipient UPI ID"
+    },
+    "/submissions/{submissionId}": {
+      "schema": {
+        "$ref": "Submission"
+      },
+      "description": "Admissions and partnership inquiries"
+    },
+    "/testimonials/{testimonialId}": {
+      "schema": {
+        "$ref": "Testimonial"
+      },
+      "description": "Verified student transformation stories and social proof"
+    }
+  }
+}

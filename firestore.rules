@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // System Settings (e.g. active UPI ID for checkout)
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow write: if isValidId(settingId);
+    }
+
+    // Customer and Student Orders (UPI purchases for Shunya and Codagram cohorts)
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId);
+      allow list: if true;
+      allow create: if isValidId(orderId)
+        && incoming().orderId is string
+        && incoming().amount is number
+        && incoming().amount > 0
+        && incoming().buyerName is string
+        && incoming().buyerEmail is string;
+      allow update: if isValidId(orderId);
+      allow delete: if false;
+    }
+
+    // Applications & Inquiries (Students, Employers, Partnerships, Conversations)
+    match /submissions/{submissionId} {
+      allow get: if isValidId(submissionId);
+      allow list: if true;
+      allow create: if isValidId(submissionId)
+        && incoming().submissionId is string
+        && incoming().type is string
+        && incoming().data is map;
+      allow update: if isValidId(submissionId);
+      allow delete: if false;
+    }
+
+    // Verified Student Testimonials & Social Proof
+    match /testimonials/{testimonialId} {
+      allow get: if isValidId(testimonialId);
+      allow list: if true;
+      allow create: if isValidId(testimonialId)
+        && incoming().studentName is string
+        && incoming().quote is string;
+      allow update: if isValidId(testimonialId);
+      allow delete: if isValidId(testimonialId);
+    }
+  }
+}
