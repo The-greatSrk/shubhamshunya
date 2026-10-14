@@ -98,58 +98,63 @@ export const CodagramSection: React.FC<CodagramSectionProps> = ({
       <div className="space-y-20">
         {/* Section Header */}
         <div className="space-y-5 max-w-3xl">
-          <div className="inline-flex items-center gap-2 text-xs font-mono-code uppercase tracking-widest text-[#d4af37]">
+          <div className="inline-flex items-center gap-2 text-xs font-mono-code uppercase tracking-widest text-[#4285F4]">
             <Cpu className="w-3.5 h-3.5" />
-            <span>PILLAR ONE — THE EXECUTION LAYER</span>
+            <span>PILLAR ONE — THE CAPABILITY ENGINE</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-heading font-black tracking-tight text-white uppercase leading-tight">
-            Education, Rebuilt Around Capability.
+            Education, Rebuilt Around <span className="text-[#34A853]">Capability</span>.
           </h2>
-          <p className="text-base sm:text-lg text-neutral-300 font-light leading-relaxed">
+          <p className="text-base sm:text-lg text-slate-300 font-light leading-relaxed">
             Codagram is not another coaching institute. It is a system built to end the tragic gap where students spend years accumulating degrees only to discover they still don't know how to build or earn.
           </p>
         </div>
 
         {/* Interactive Capability Flow Diagram */}
-        <div className="p-6 sm:p-8 rounded-2xl glass-panel space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-5">
+        <div className="p-6 sm:p-8 rounded-2xl bg-[#0F1523] border border-[#1E293B] space-y-6 glow-google-blue">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1E293B] pb-5">
             <div>
-              <span className="text-xs font-mono-code uppercase tracking-widest text-neutral-400">
+              <span className="text-xs font-mono-code uppercase tracking-widest text-slate-400">
                 The Codagram Pipeline
               </span>
               <h3 className="text-xl font-heading font-bold text-white">
                 How Learning Transforms Into Independence
               </h3>
             </div>
-            <span className="text-xs font-mono-code text-[#d4af37] bg-[#d4af37]/10 px-3 py-1 rounded-full border border-[#d4af37]/20 self-start sm:self-auto">
-              Interactive Flow
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#34A853] animate-pulse" />
+              <span className="text-xs font-mono-code text-[#34A853] bg-[#34A853]/15 px-3 py-1 rounded-full border border-[#34A853]/30">
+                8-Stage Sovereign Arc
+              </span>
+            </div>
           </div>
 
           {/* Stepper Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
             {flowSteps.map((step, idx) => {
               const isActive = activeStep === idx;
+              const stepColors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853'];
+              const currentColor = stepColors[idx % stepColors.length];
               return (
                 <button
                   key={step.label}
                   onClick={() => setActiveStep(idx)}
                   className={`p-3.5 rounded-xl text-left transition-all border flex flex-col justify-between gap-3 ${
                     isActive
-                      ? 'bg-white/[0.1] border-[#d4af37] shadow-sm'
-                      : 'bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05]'
+                      ? 'bg-[#141C2E] border-[#4285F4] shadow-md shadow-[#4285F4]/20'
+                      : 'bg-[#080B10] border-[#1E293B] hover:border-slate-600'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono-code text-neutral-500">
+                    <span className="text-[10px] font-mono-code text-slate-500">
                       0{idx + 1}
                     </span>
                     {isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: currentColor }} />
                     )}
                   </div>
                   <div>
-                    <div className={`text-xs font-mono-code font-bold tracking-wider ${isActive ? 'text-[#d4af37]' : 'text-neutral-200'}`}>
+                    <div className={`text-xs font-mono-code font-bold tracking-wider ${isActive ? 'text-white' : 'text-slate-400'}`}>
                       {step.label}
                     </div>
                   </div>
@@ -196,29 +201,37 @@ export const CodagramSection: React.FC<CodagramSectionProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {whatYouGet.map((item, idx) => {
               const Icon = item.icon;
+              const borderColors = ['border-[#4285F4]/30', 'border-[#EA4335]/30', 'border-[#FBBC05]/30', 'border-[#34A853]/30'];
+              const iconColors = ['text-[#4285F4]', 'text-[#EA4335]', 'text-[#FBBC05]', 'text-[#34A853]'];
+              const hoverGlow = ['group-hover:border-[#4285F4]', 'group-hover:border-[#EA4335]', 'group-hover:border-[#FBBC05]', 'group-hover:border-[#34A853]'];
+              const chosenBorder = borderColors[idx % 4];
+              const chosenIcon = iconColors[idx % 4];
+              const chosenHover = hoverGlow[idx % 4];
+
               return (
                 <div
                   key={idx}
-                  className="p-6 rounded-2xl glass-panel border border-white/[0.06] hover:border-white/[0.15] transition-all flex flex-col justify-between gap-6 group"
+                  className={`p-6 rounded-2xl bg-[#0F1523] border ${chosenBorder} ${chosenHover} transition-all flex flex-col justify-between gap-6 group hover:bg-[#141C2E]`}
                 >
                   <div className="space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-neutral-300 group-hover:text-[#d4af37] group-hover:border-[#d4af37]/30 transition-colors">
+                    <div className={`w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center ${chosenIcon} transition-colors`}>
                       <Icon className="w-5 h-5" />
                     </div>
                     <div>
-                      <span className="text-[10px] font-mono-code uppercase tracking-wider text-neutral-500">
+                      <span className="text-[10px] font-mono-code uppercase tracking-wider text-slate-500">
                         {item.subtitle}
                       </span>
                       <h4 className="text-base font-heading font-bold text-white">
                         {item.title}
                       </h4>
                     </div>
-                    <p className="text-xs text-neutral-400 leading-relaxed font-light">
+                    <p className="text-xs text-slate-400 leading-relaxed font-light">
                       {item.desc}
                     </p>
                   </div>
-                  <div className="text-[10px] font-mono-code text-neutral-600 uppercase tracking-widest">
-                    Pillar 0{idx + 1}
+                  <div className="text-[10px] font-mono-code text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                    <span>Pillar 0{idx + 1}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/20 group-hover:bg-[#4285F4]" />
                   </div>
                 </div>
               );

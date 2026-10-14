@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /api/testimonials
+Allow: /api/orders
+Disallow: /admin
+
+# Host and Sitemap
+Sitemap: https://codagram.in/sitemap.xml

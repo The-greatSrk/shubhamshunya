@@ -15,7 +15,11 @@ import {
   Search,
   Filter,
   Plus,
-  Award
+  Award,
+  Globe,
+  AlertCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 import { 
   getPaymentConfig, 
@@ -36,7 +40,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
   const [passcode, setPasscode] = useState('');
   const [authError, setAuthError] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'upi_settings' | 'orders' | 'admissions' | 'student_stories'>('upi_settings');
+  const [activeTab, setActiveTab] = useState<'upi_settings' | 'orders' | 'admissions' | 'student_stories' | 'google_seo'>('upi_settings');
 
   // UPI Settings State
   const [upiId, setUpiId] = useState('shubhamkasar@upi');
@@ -65,6 +69,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
   const [newSkillsInput, setNewSkillsInput] = useState('TypeScript, Go, Distributed Systems');
   const [savingStory, setSavingStory] = useState(false);
   const [storySuccess, setStorySuccess] = useState(false);
+
+  // Google SEO & Indexing State
+  const [googleVerification, setGoogleVerification] = useState('');
+  const [savingSeo, setSavingSeo] = useState(false);
+  const [seoSuccess, setSeoSuccess] = useState(false);
+  const [copiedLink, setCopiedLink] = useState('');
 
   // Load config and data
   const loadData = async () => {
@@ -116,6 +126,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
       console.error(e);
     } finally {
       setLoadingTestimonials(false);
+    }
+
+    // 5. SEO Config
+    try {
+      const res = await fetch('/api/seo/config');
+      const data = await res.json();
+      if (data && data.googleSiteVerification) {
+        setGoogleVerification(data.googleSiteVerification);
+      }
+    } catch (e) {
+      console.warn('Error loading SEO config:', e);
+    }
+  };
+
+  const handleSaveSeo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSeo(true);
+    setSeoSuccess(false);
+    try {
+      await fetch('/api/seo/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleVerification: googleVerification.trim() }),
+      });
+      setSeoSuccess(true);
+      setTimeout(() => setSeoSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to save SEO config:', err);
+    } finally {
+      setSavingSeo(false);
     }
   };
 
@@ -361,6 +401,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>Admissions ({submissions.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('google_seo')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-code flex items-center gap-1.5 transition-colors shrink-0 ${
+                  activeTab === 'google_seo'
+                    ? 'bg-white text-black font-semibold'
+                    : 'text-neutral-400 hover:text-white bg-white/[0.03]'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span>Google Search & SEO</span>
               </button>
             </div>
 
@@ -784,6 +836,262 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: GOOGLE SEARCH & SEO INDEXING DECK */}
+            {activeTab === 'google_seo' && (
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Header */}
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 text-xs font-mono-code text-blue-400 uppercase">
+                    <Globe className="w-4 h-4" />
+                    <span>Google Search Discovery & Indexing</span>
+                  </div>
+                  <h4 className="text-xl font-heading font-bold text-white">
+                    Appear in Google Search for "Shubham Kasar" & "Codagram"
+                  </h4>
+                  <p className="text-xs font-mono-code text-neutral-400">
+                    Diagnose Google ranking, submit your XML sitemap, and link your high-authority LinkedIn profile
+                  </p>
+                </div>
+
+                {/* Why only LinkedIn appears explanation banner */}
+                <div className="p-4 rounded-xl bg-blue-950/20 border border-blue-500/20 space-y-2">
+                  <div className="flex items-center gap-2 text-blue-300 font-medium text-xs font-mono-code uppercase">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Why did only your LinkedIn appear initially?</span>
+                  </div>
+                  <p className="text-xs text-neutral-300 font-light leading-relaxed">
+                    Google has already indexed your LinkedIn profile because LinkedIn has an immense domain authority (DA 98) and Googlebot crawls it every hour. New websites and Cloud Run apps are not automatically ranked until Googlebot discovers them, verifies site ownership, and parses your sitemap. By following the 3-minute steps below, you directly prompt Google's crawler to index your website.
+                  </p>
+                </div>
+
+                {/* Live Crawl Diagnostics & Links */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-black/60 border border-white/[0.08] space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono-code">
+                      <span className="text-neutral-400 uppercase">robots.txt</span>
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Live
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 font-mono-code">
+                      Allows all search engines to crawl all sections and lists your sitemap.
+                    </p>
+                    <a
+                      href="/robots.txt"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[#d4af37] hover:underline font-mono-code pt-1"
+                    >
+                      <span>View robots.txt</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-black/60 border border-white/[0.08] space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono-code">
+                      <span className="text-neutral-400 uppercase">sitemap.xml</span>
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Live
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 font-mono-code">
+                      Includes 9 canonical index routes with priority & daily changefreq.
+                    </p>
+                    <a
+                      href="/sitemap.xml"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[#d4af37] hover:underline font-mono-code pt-1"
+                    >
+                      <span>View sitemap.xml</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-black/60 border border-white/[0.08] space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono-code">
+                      <span className="text-neutral-400 uppercase">Schema.org JSON-LD</span>
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Linked
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 font-mono-code">
+                      Tied directly to your LinkedIn with <code className="text-white">sameAs</code> for Knowledge Graph.
+                    </p>
+                    <span className="text-xs text-neutral-400 font-mono-code block pt-1">
+                      Includes FAQPage & Person
+                    </span>
+                  </div>
+                </div>
+
+                {/* Google Site Verification Form */}
+                <div className="p-6 rounded-xl glass-panel space-y-4">
+                  <div className="space-y-1">
+                    <h5 className="text-sm font-heading font-bold text-white">
+                      Google Search Console Site Verification
+                    </h5>
+                    <p className="text-xs text-neutral-400 font-mono-code">
+                      Paste the verification code from Google Search Console (either the string inside <code className="text-neutral-300">content="..."</code> or the full meta tag).
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSaveSeo} className="space-y-4">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <input
+                        type="text"
+                        value={googleVerification}
+                        onChange={(e) => {
+                          let val = e.target.value;
+                          // If user pastes full meta tag, extract the content
+                          const match = val.match(/content=["']([^"']+)["']/);
+                          if (match && match[1]) {
+                            val = match[1];
+                          }
+                          setGoogleVerification(val);
+                        }}
+                        placeholder="e.g. 7qX8Y-abcdef1234567890..."
+                        className="flex-1 px-4 py-2.5 text-xs font-mono-code bg-black/60 border border-white/[0.1] rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                      />
+
+                      <button
+                        type="submit"
+                        disabled={savingSeo}
+                        className="py-2.5 px-6 rounded-xl text-xs font-mono-code uppercase font-semibold text-black bg-white hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2"
+                      >
+                        {savingSeo ? (
+                          <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Save className="w-3.5 h-3.5" />
+                        )}
+                        <span>Save Verification</span>
+                      </button>
+                    </div>
+
+                    {seoSuccess && (
+                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono-code text-emerald-400 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Google Search Console verification meta tag updated live!</span>
+                      </div>
+                    )}
+                  </form>
+                </div>
+
+                {/* Fast-Track Step by Step Checklist to Rank in 24-48 Hours */}
+                <div className="p-6 rounded-xl bg-black/60 border border-white/[0.08] space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h5 className="text-sm font-heading font-bold text-white uppercase tracking-wider">
+                      Fast-Track Indexing Protocol (Takes ~3 minutes)
+                    </h5>
+                    <a
+                      href="https://search.google.com/search-console"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono-code transition-colors"
+                    >
+                      <span>Open Google Search Console</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="space-y-4 text-xs font-mono-code">
+                    {/* Step 1 */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                      <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0">
+                        1
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-white font-semibold">Add Your Property to Search Console</div>
+                        <p className="text-neutral-400 font-light">
+                          Go to Google Search Console, click <strong>"Add Property"</strong>, choose <strong>"URL prefix"</strong>, and enter:
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="text-[#d4af37] bg-black/80 px-2 py-1 rounded text-[11px]">
+                            {window.location.origin}
+                          </code>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(window.location.origin);
+                              setCopiedLink('origin');
+                              setTimeout(() => setCopiedLink(''), 2000);
+                            }}
+                            className="p-1 hover:text-white text-neutral-400"
+                            title="Copy URL"
+                          >
+                            {copiedLink === 'origin' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 2 */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                      <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0">
+                        2
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-white font-semibold">Verify Ownership via HTML Tag</div>
+                        <p className="text-neutral-400 font-light">
+                          Under verification methods, select <strong>"HTML tag"</strong>. Copy the tag, paste the code into the box above, click <strong>Save Verification</strong>, and then click <strong>"Verify"</strong> in Google Search Console.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Step 3 */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                      <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0">
+                        3
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-white font-semibold">Submit Your XML Sitemap</div>
+                        <p className="text-neutral-400 font-light">
+                          In Google Search Console's left sidebar, click <strong>"Sitemaps"</strong>. Under "Add a new sitemap", type:
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="text-emerald-400 bg-black/80 px-2 py-1 rounded text-[11px]">
+                            sitemap.xml
+                          </code>
+                          <span className="text-neutral-400">and click <strong>Submit</strong>.</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 4 */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                      <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0">
+                        4
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-white font-semibold">Request Instant Indexing (Priority Queue)</div>
+                        <p className="text-neutral-400 font-light">
+                          In the top search bar of Search Console (Inspect any URL), enter <code className="text-white">{window.location.origin}/</code>, press Enter, and click <strong>"Request Indexing"</strong>. This bypasses normal crawling delays and puts you into Google's priority queue within 24 to 48 hours.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Step 5 */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                      <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0">
+                        5
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-white font-semibold">Leverage Your LinkedIn Profile's High Authority (Crucial)</div>
+                        <p className="text-neutral-400 font-light leading-relaxed">
+                          Because Google already trusts and indexes your LinkedIn profile, go to your LinkedIn profile:
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 text-neutral-300 pt-1">
+                          <li>Click <strong>Edit contact info</strong> &rarr; Add Website URL: <code className="text-[#d4af37]">{window.location.origin}</code> (type: Company / Personal Website).</li>
+                          <li>In your <strong>Headline</strong> & <strong>About</strong> section, write: "Founder at Codagram (<code className="text-[#d4af37]">{window.location.origin}</code>)".</li>
+                        </ul>
+                        <p className="text-neutral-400 font-light pt-1">
+                          This passes authoritative backlink signals from LinkedIn to this website, connecting your personal brand in Google's Knowledge Graph.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

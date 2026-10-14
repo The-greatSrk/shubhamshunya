@@ -25,7 +25,7 @@ import { Sparkles, CreditCard, ShieldCheck } from 'lucide-react';
 export default function App() {
   const [activeSection, setActiveSection] = useState('hero');
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [aiModalTab, setAiModalTab] = useState<'chat' | 'think' | 'search' | 'maps' | 'image'>('chat');
+  const [aiModalTab, setAiModalTab] = useState<'terminal' | 'chat' | 'think' | 'search' | 'maps' | 'image'>('terminal');
 
   // Application & Hiring Modal State
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
@@ -63,7 +63,7 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const openAiStudio = (tab: 'chat' | 'think' | 'search' | 'maps' | 'image' = 'chat') => {
+  const openAiStudio = (tab: 'terminal' | 'chat' | 'think' | 'search' | 'maps' | 'image' = 'terminal') => {
     setAiModalTab(tab);
     setIsAiModalOpen(true);
   };
@@ -110,7 +110,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-[#ededef] selection:bg-[#d4af37]/30 selection:text-white">
+    <div className="min-h-screen bg-[#080B10] text-[#F1F5F9] selection:bg-[#4285F4]/30 selection:text-white">
       {/* Persistent Navigation with Admin button */}
       <Navbar
         onOpenAiSuite={(tab) => openAiStudio(tab)}
@@ -193,26 +193,29 @@ export default function App() {
         onOpenAdmin={() => setIsAdminDashboardOpen(true)}
       />
 
-      {/* Floating Action Button for Gemini Intelligence Terminal */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+      {/* Floating Action Buttons for Admin & AI Intelligence Terminal */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5">
         <button
           onClick={() => setIsAdminDashboardOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2.5 rounded-full bg-[#121218]/90 hover:bg-[#1a1a24] text-neutral-400 hover:text-white border border-white/[0.08] shadow-2xl backdrop-blur-md transition-all text-xs font-mono-code"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-[#0F1523]/95 hover:bg-[#141C2E] text-slate-400 hover:text-white border border-[#1E293B] shadow-2xl backdrop-blur-md transition-all text-xs font-mono-code"
           title="Admin Desk & UPI Setup"
         >
-          <ShieldCheck className="w-3.5 h-3.5 text-[#d4af37]" />
-          <span className="hidden md:inline">Admin</span>
+          <ShieldCheck className="w-3.5 h-3.5 text-[#34A853]" />
+          <span className="hidden md:inline">Admin Desk</span>
         </button>
 
         <button
-          onClick={() => openAiStudio('chat')}
-          className="flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#121218]/90 hover:bg-[#1a1a24] text-white border border-[#d4af37]/40 shadow-2xl backdrop-blur-md transition-all hover:scale-105 group"
-          title="Open AI Studio Terminal"
+          onClick={() => openAiStudio('terminal')}
+          className="flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#0F1523]/95 hover:bg-[#141C2E] text-white border border-[#4285F4]/50 shadow-2xl backdrop-blur-md transition-all hover:scale-105 group glow-google-blue"
+          title="Open Founder AI Terminal CLI"
         >
-          <div className="w-2.5 h-2.5 rounded-full bg-[#d4af37] animate-ping" />
-          <Sparkles className="w-4 h-4 text-[#d4af37]" />
-          <span className="text-xs font-mono-code tracking-wider uppercase hidden sm:inline">
-            Digital AI
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-[#4285F4] animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-[#34A853]" />
+          </div>
+          <Sparkles className="w-4 h-4 text-[#4285F4]" />
+          <span className="text-xs font-mono-code font-bold tracking-wider uppercase">
+            AI Terminal
           </span>
         </button>
       </div>
