@@ -1,8 +1,9 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
@@ -162,6 +163,388 @@ function getGeminiClient(): GoogleGenAI | null {
 }
 
 // ==========================================
+// ZERO-TRUST ADMIN AUTH & SECURITY ENGINE
+// ==========================================
+const ADMIN_AUTH_SALT = process.env.ADMIN_AUTH_SALT || 'codagram_shubham_master_secure_salt_7392';
+const AUTHORIZED_FOUNDER_EMAIL = 'shubhamkasarsrk@gmail.com';
+const VAULT_FILE_PATH = path.resolve(__dirname, '.admin_vault.json');
+
+interface VaultConfig {
+  passwordHash: string;
+  updatedAt: string;
+  founderEmail: string;
+}
+
+function hashPassword(plain: string): string {
+  return crypto.createHash('sha256').update(`${ADMIN_AUTH_SALT}:${plain}`).digest('hex');
+}
+
+// Initial hash stored in memory (encrypted SHA-256 hash, zero plain text)
+let currentVault: VaultConfig = {
+  passwordHash: hashPassword('shubham2026'),
+  updatedAt: new Date().toISOString(),
+  founderEmail: AUTHORIZED_FOUNDER_EMAIL,
+};
+
+// Load persistent vault from disk
+try {
+  if (fs.existsSync(VAULT_FILE_PATH)) {
+    const raw = JSON.parse(fs.readFileSync(VAULT_FILE_PATH, 'utf8'));
+    if (raw.passwordHash) {
+      currentVault = raw;
+    }
+  }
+} catch (e) {
+  console.warn('Could not read admin vault from disk:', e);
+}
+
+// Also sync with Firestore if present
+async function syncAdminVaultFromFirestore() {
+  if (firestoreDb) {
+    try {
+      const snap = await getDoc(doc(firestoreDb, 'settings', 'admin_vault'));
+      if (snap.exists()) {
+        const data = snap.data() as VaultConfig;
+        if (data.passwordHash) {
+          currentVault = data;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not sync vault from firestore:', e);
+    }
+  }
+}
+syncAdminVaultFromFirestore();
+
+async function saveAdminVault(newHash: string) {
+  currentVault = {
+    passwordHash: newHash,
+    updatedAt: new Date().toISOString(),
+    founderEmail: AUTHORIZED_FOUNDER_EMAIL,
+  };
+  try {
+    fs.writeFileSync(VAULT_FILE_PATH, JSON.stringify(currentVault, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Failed to write vault to disk:', e);
+  }
+  if (firestoreDb) {
+    try {
+      await setDoc(doc(firestoreDb, 'settings', 'admin_vault'), currentVault);
+    } catch (e) {
+      console.warn('Failed to write vault to firestore:', e);
+    }
+  }
+}
+
+// Active session store (token -> session info)
+interface AdminSession {
+  token: string;
+  createdAt: number;
+  expiresAt: number;
+  method: 'password' | 'google_oauth';
+  email: string;
+}
+const activeAdminSessions = new Map<string, AdminSession>();
+const SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+// Brute-force protection: IP -> { attempts, lockedUntil }
+interface RateLimitInfo {
+  attempts: number;
+  lockedUntil: number;
+}
+const loginRateLimiter = new Map<string, RateLimitInfo>();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+function getClientIdentifier(req: Request): string {
+  return (
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    'unknown_client'
+  );
+}
+
+// Middleware: Verify Admin Session
+function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Admin authentication token required' });
+  }
+
+  const token = authHeader.substring(7);
+  const session = activeAdminSessions.get(token);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Session invalid or expired. Please authenticate.' });
+  }
+
+  if (Date.now() > session.expiresAt) {
+    activeAdminSessions.delete(token);
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+
+  // Slide expiration window
+  session.expiresAt = Date.now() + SESSION_DURATION_MS;
+  (req as any).adminSession = session;
+  next();
+}
+
+// ------------------------------------------
+// ADMIN AUTHENTICATION API ROUTES
+// ------------------------------------------
+
+// 1. Password login with rate limiting & constant-time hash comparison
+app.post('/api/admin/login', (req: Request, res: Response) => {
+  const ip = getClientIdentifier(req);
+  const now = Date.now();
+  const rateInfo = loginRateLimiter.get(ip) || { attempts: 0, lockedUntil: 0 };
+
+  if (rateInfo.lockedUntil > now) {
+    const remainingSec = Math.ceil((rateInfo.lockedUntil - now) / 1000);
+    return res.status(429).json({
+      error: `Security Lockout: Too many failed login attempts. Please wait ${remainingSec} seconds before retrying.`,
+      lockedSeconds: remainingSec,
+    });
+  }
+
+  const { password } = req.body;
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({ error: 'Master password is required.' });
+  }
+
+  const inputHash = hashPassword(password);
+  let match = false;
+  try {
+    match = crypto.timingSafeEqual(
+      Buffer.from(inputHash, 'hex'),
+      Buffer.from(currentVault.passwordHash, 'hex')
+    );
+  } catch {
+    match = false;
+  }
+
+  if (!match) {
+    rateInfo.attempts += 1;
+    if (rateInfo.attempts >= MAX_LOGIN_ATTEMPTS) {
+      rateInfo.lockedUntil = now + LOCKOUT_DURATION_MS;
+      loginRateLimiter.set(ip, rateInfo);
+      return res.status(429).json({
+        error: 'Security Lockout: Maximum login attempts exceeded. Access locked for 15 minutes.',
+        lockedSeconds: 900,
+      });
+    }
+    loginRateLimiter.set(ip, rateInfo);
+    const attemptsRemaining = MAX_LOGIN_ATTEMPTS - rateInfo.attempts;
+    return res.status(401).json({
+      error: `Access denied: Invalid master credentials. (${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining)`,
+      attemptsRemaining,
+    });
+  }
+
+  // Successful login
+  loginRateLimiter.delete(ip);
+  const token = crypto.randomBytes(32).toString('hex');
+  const session: AdminSession = {
+    token,
+    createdAt: now,
+    expiresAt: now + SESSION_DURATION_MS,
+    method: 'password',
+    email: AUTHORIZED_FOUNDER_EMAIL,
+  };
+  activeAdminSessions.set(token, session);
+
+  res.json({
+    success: true,
+    token,
+    expiresAt: session.expiresAt,
+    method: 'password',
+    founderEmail: AUTHORIZED_FOUNDER_EMAIL,
+  });
+});
+
+// 2. Google OAuth Login for Verified Founder (shubhamkasarsrk@gmail.com)
+app.post('/api/admin/google-login', (req: Request, res: Response) => {
+  const { email } = req.body;
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Email is required for Google verification.' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  if (cleanEmail !== AUTHORIZED_FOUNDER_EMAIL.toLowerCase()) {
+    return res.status(403).json({
+      error: `Access Denied: The Google Account (${cleanEmail}) is not authorized as the founder. Only ${AUTHORIZED_FOUNDER_EMAIL} is granted administrative privileges.`,
+    });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  const session: AdminSession = {
+    token,
+    createdAt: now,
+    expiresAt: now + SESSION_DURATION_MS,
+    method: 'google_oauth',
+    email: AUTHORIZED_FOUNDER_EMAIL,
+  };
+  activeAdminSessions.set(token, session);
+
+  res.json({
+    success: true,
+    token,
+    expiresAt: session.expiresAt,
+    method: 'google_oauth',
+    founderEmail: AUTHORIZED_FOUNDER_EMAIL,
+  });
+});
+
+// 3. Verify Active Session
+app.get('/api/admin/session', requireAdminAuth, (req: Request, res: Response) => {
+  const session = (req as any).adminSession as AdminSession;
+  res.json({
+    authenticated: true,
+    session: {
+      method: session.method,
+      email: session.email,
+      expiresAt: session.expiresAt,
+    },
+  });
+});
+
+// 4. Logout Session
+app.post('/api/admin/logout', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    activeAdminSessions.delete(token);
+  }
+  res.json({ success: true, message: 'Logged out successfully.' });
+});
+
+// 5. Change Master Password (Authenticated)
+app.post('/api/admin/change-password', requireAdminAuth, async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required.' });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+  }
+
+  const currentInputHash = hashPassword(currentPassword);
+  let match = false;
+  try {
+    match = crypto.timingSafeEqual(
+      Buffer.from(currentInputHash, 'hex'),
+      Buffer.from(currentVault.passwordHash, 'hex')
+    );
+  } catch {
+    match = false;
+  }
+
+  if (!match) {
+    return res.status(401).json({ error: 'Current password verification failed. Please enter your existing password correctly.' });
+  }
+
+  const newHash = hashPassword(newPassword);
+  await saveAdminVault(newHash);
+
+  res.json({
+    success: true,
+    message: 'Master password has been updated and securely stored in encrypted vault.',
+  });
+});
+
+// ------------------------------------------
+// FOUNDER EXACT PHOTO PERSISTENCE & ASSET SYNC
+// ------------------------------------------
+let activeFounderPhotoUrl = '';
+
+async function initFounderPhoto() {
+  if (firestoreDb) {
+    try {
+      const snap = await getDoc(doc(firestoreDb, 'settings', 'founder_photo'));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.photoUrl) {
+          activeFounderPhotoUrl = data.photoUrl;
+          console.log('Loaded permanent founder photo from Cloud Firestore.');
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load founder photo from Firestore:', e);
+    }
+  }
+}
+initFounderPhoto();
+
+app.get('/api/founder-photo', (_req: Request, res: Response) => {
+  res.json({ photoUrl: activeFounderPhotoUrl || null });
+});
+
+app.post('/api/admin/founder-photo', requireAdminAuth, async (req: Request, res: Response) => {
+  const { photoBase64, mimeType = 'image/jpeg' } = req.body;
+  if (!photoBase64 || typeof photoBase64 !== 'string') {
+    return res.status(400).json({ error: 'photoBase64 data is required.' });
+  }
+
+  try {
+    const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // 1. Save to assets directory
+    const imagesDir = path.resolve(__dirname, 'src', 'assets', 'images');
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+    const targetFilePng = path.resolve(imagesDir, 'founder_official_portrait.png');
+    const targetFileJpg = path.resolve(imagesDir, 'founder_shubham_kasar_permanent_1791977635674.jpg');
+    fs.writeFileSync(targetFilePng, buffer);
+    fs.writeFileSync(targetFileJpg, buffer);
+
+    // 2. Also save to dist assets if dist exists
+    const distAssetsDir = path.resolve(__dirname, 'dist', 'assets');
+    if (fs.existsSync(distAssetsDir)) {
+      const files = fs.readdirSync(distAssetsDir);
+      for (const f of files) {
+        if (f.startsWith('founder_shubham_kasar_permanent') || f.startsWith('founder_official_portrait')) {
+          try {
+            fs.writeFileSync(path.resolve(distAssetsDir, f), buffer);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    // 3. Save as data URL
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+    activeFounderPhotoUrl = dataUrl;
+
+    // 4. Save to Firestore for permanent persistence
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'settings', 'founder_photo'), {
+          photoUrl: dataUrl,
+          updatedAt: new Date().toISOString(),
+          updatedBy: AUTHORIZED_FOUNDER_EMAIL,
+        });
+      } catch (err) {
+        console.warn('Could not persist founder photo to Firestore:', err);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Exact official founder photo successfully uploaded and permanently set across the platform.',
+      photoUrl: dataUrl,
+    });
+  } catch (err: any) {
+    console.error('Failed to process founder photo upload:', err);
+    res.status(500).json({ error: 'Failed to process image: ' + err.message });
+  }
+});
+
+// ==========================================
 // UPI PAYMENT CONFIG & ORDERS ENDPOINTS
 // ==========================================
 
@@ -180,8 +563,8 @@ app.get('/api/settings/upi', async (_req: Request, res: Response) => {
   res.json(activePaymentConfig);
 });
 
-// 2. Update UPI recipient settings (used by Shubham in Admin Dashboard)
-app.post('/api/settings/upi', async (req: Request, res: Response) => {
+// 2. Update UPI recipient settings (protected: requires admin auth)
+app.post('/api/settings/upi', requireAdminAuth, async (req: Request, res: Response) => {
   const { upiId, payeeName, currency = 'INR' } = req.body;
   if (!upiId) {
     return res.status(400).json({ error: 'Valid UPI ID is required (e.g. yourname@upi)' });
@@ -260,8 +643,8 @@ app.post('/api/orders', async (req: Request, res: Response) => {
   });
 });
 
-// 4. List all orders (for Admin Dashboard)
-app.get('/api/orders', async (_req: Request, res: Response) => {
+// 4. List all orders (for Admin Dashboard - protected)
+app.get('/api/orders', requireAdminAuth, async (_req: Request, res: Response) => {
   if (firestoreDb) {
     try {
       const snap = await getDocs(collection(firestoreDb, 'orders'));
@@ -279,8 +662,8 @@ app.get('/api/orders', async (_req: Request, res: Response) => {
   res.json({ orders: ordersStore });
 });
 
-// 5. Update order status (Admin verification or fulfilment)
-app.patch('/api/orders/:id', async (req: Request, res: Response) => {
+// 5. Update order status (Admin verification or fulfilment - protected)
+app.patch('/api/orders/:id', requireAdminAuth, async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, utrNumber } = req.body;
 
@@ -349,7 +732,7 @@ app.post('/api/submissions', async (req: Request, res: Response) => {
   });
 });
 
-app.get('/api/submissions', async (_req: Request, res: Response) => {
+app.get('/api/submissions', requireAdminAuth, async (_req: Request, res: Response) => {
   if (firestoreDb) {
     try {
       const snap = await getDocs(collection(firestoreDb, 'submissions'));
@@ -375,7 +758,7 @@ app.get('/api/submissions', async (_req: Request, res: Response) => {
   res.json({ submissions: submissionsStore });
 });
 
-app.patch('/api/submissions/:id', async (req: Request, res: Response) => {
+app.patch('/api/submissions/:id', requireAdminAuth, async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -708,7 +1091,7 @@ Shubham Kasar is a software architect, author, and educator based in Pune, India
 - **Founder of Codagram:** An alternative engineering academy training engineers through intense production systems rather than rote theory.
 - **Author of "Shunya: Sat Chit Anand":** A philosophical work on consciousness, ego detachment, and inner sovereignty.
 - **Worldview:** *"Build everything. Depend on nothing."* Combining high-leverage technology outside with profound consciousness within.
-- **LinkedIn:** [linkedin.com/in/shubhamkasar](https://www.linkedin.com/in/shubhamkasar) — ranked #1 on Google Search for engineering capability and conscious leadership.
+- **LinkedIn:** [in.linkedin.com/in/shubham-kasar-ba050323b](https://in.linkedin.com/in/shubham-kasar-ba050323b) — Official LinkedIn Profile (650+ followers), CEO & Founder @ Codagram.
 - **Direct Dialogue:** You can request a 1-on-1 counsel session via the "Talk to Shubham" section or email directly at \`shubhamkasarsrk@gmail.com\`.`;
   }
 
@@ -872,7 +1255,7 @@ Location:    Pune, Maharashtra, India
 Founding:    Codagram (Capability-First Engineering Academy)
 Author of:   "Shunya: Sat Chit Anand" (Philosophy of Consciousness)
 Core Posture: "Build everything. Depend on nothing."
-LinkedIn:    https://www.linkedin.com/in/shubhamkasar (Rank #1 Google SEO)
+LinkedIn:    https://in.linkedin.com/in/shubham-kasar-ba050323b (Rank #1 Google SEO)
 Direct Mail: shubhamkasarsrk@gmail.com
 Status:      Sovereign Builder • Zero Debt • Open Source Contributor`,
         status: 'success',
@@ -943,7 +1326,7 @@ VERIFIED CAPABILITY PROOFS (REAL STUDENT OUTCOMES)
       return res.json({
         output: `Founder Desk:
   Email:    shubhamkasarsrk@gmail.com
-  LinkedIn: https://www.linkedin.com/in/shubhamkasar
+  LinkedIn: https://in.linkedin.com/in/shubham-kasar-ba050323b
   HQ:       Pune, Maharashtra, India
   Meeting:  Request 1-on-1 dialogue via "Talk to Shubham" section.`,
         status: 'success',

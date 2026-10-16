@@ -9,27 +9,32 @@ export function getStoredFounderPhoto(): string {
   if (typeof window === 'undefined') return ASSETS.founderPhoto;
   try {
     const stored = localStorage.getItem(FOUNDER_PHOTO_STORAGE_KEY);
-    return stored || ASSETS.founderPhoto;
+    if (stored) return stored;
   } catch {
-    return ASSETS.founderPhoto;
+    // ignore
   }
+  return ASSETS.founderPhoto;
 }
 
 export function saveCustomFounderPhoto(dataUrl: string): void {
-  try {
-    localStorage.setItem(FOUNDER_PHOTO_STORAGE_KEY, dataUrl);
-    window.dispatchEvent(new CustomEvent(ASSETS_CHANGE_EVENT));
-  } catch (err) {
-    console.error('Failed to save founder photo to localStorage', err);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(FOUNDER_PHOTO_STORAGE_KEY, dataUrl);
+      window.dispatchEvent(new CustomEvent(ASSETS_CHANGE_EVENT));
+    } catch (e) {
+      console.warn('Could not save founder photo to localStorage:', e);
+    }
   }
 }
 
 export function resetCustomFounderPhoto(): void {
-  try {
-    localStorage.removeItem(FOUNDER_PHOTO_STORAGE_KEY);
-    window.dispatchEvent(new CustomEvent(ASSETS_CHANGE_EVENT));
-  } catch (err) {
-    console.error('Failed to reset founder photo', err);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(FOUNDER_PHOTO_STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent(ASSETS_CHANGE_EVENT));
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -84,6 +89,19 @@ export function useLiveAssets() {
   });
 
   useEffect(() => {
+    // Initial fetch from server for cross-device persistence
+    fetch('/api/founder-photo')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.photoUrl) {
+          setFounderPhoto(data.photoUrl);
+          setHasCustomFounder(true);
+        }
+      })
+      .catch(() => {
+        // Fallback to local / assets
+      });
+
     const handleUpdate = () => {
       setFounderPhoto(getStoredFounderPhoto());
       setBookCover(getStoredBookCover().url);

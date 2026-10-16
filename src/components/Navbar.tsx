@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, Sparkles, ArrowRight, BookOpen, Terminal, Users, ShieldCheck } from 'lucide-react';
+import { GoogleTranslateToggle, GoogleTranslateBanner } from './GoogleTranslateToggle';
 
 interface NavbarProps {
   onOpenAiSuite: (initialTab?: 'terminal' | 'chat' | 'think' | 'search' | 'maps' | 'image') => void;
@@ -40,10 +41,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
-          ? 'bg-[#080B10]/95 backdrop-blur-md border-b border-[#1E293B] py-3 shadow-lg'
-          : 'bg-transparent py-5'
+          ? 'bg-[#080B10]/95 backdrop-blur-md border-b border-[#1E293B] py-2 sm:py-3 shadow-lg'
+          : 'bg-[#080B10]/80 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none py-3 sm:py-5'
       }`}
     >
+      {/* Top Banner when translation is active */}
+      <GoogleTranslateBanner />
+
       <div className="max-w-7xl mx-auto px-5 sm:px-8 flex items-center justify-between">
         {/* Brand mark with Google Color Cluster */}
         <a href="#" className="flex items-center gap-3 group">
@@ -88,8 +92,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </nav>
 
-        {/* Action CTAs */}
+        {/* Action CTAs: Google Translate Toggle in middle between name on top and admin button */}
         <div className="hidden sm:flex items-center gap-2.5">
+          {/* Dedicated Google Translate Toggle Button */}
+          <GoogleTranslateToggle showQuickPills={true} />
+
+          {/* Admin Desk Button */}
           <button
             onClick={onOpenAdmin}
             className="px-3 py-1.5 rounded-full text-xs font-mono-code text-slate-400 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-[#1E293B] transition-colors flex items-center gap-1.5"
@@ -117,19 +125,32 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Mobile Hamburger */}
-        <div className="flex sm:hidden items-center gap-2">
+        {/* Mobile Actions: Google Translate Toggle in middle between Name and Admin */}
+        <div className="flex sm:hidden items-center gap-1.5">
+          <GoogleTranslateToggle showQuickPills={false} />
+          
+          <button
+            onClick={onOpenAdmin}
+            className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-[#1E293B] text-slate-300 flex items-center justify-center"
+            title="Founder Admin Desk"
+          >
+            <ShieldCheck className="w-4 h-4 text-[#34A853]" />
+          </button>
+
           <button
             onClick={() => onOpenAiSuite('terminal')}
-            className="p-2 rounded-lg bg-[#0F1523] border border-[#4285F4]/40 text-[#4285F4]"
+            className="p-1.5 rounded-lg bg-[#0F1523] border border-[#4285F4]/40 text-[#4285F4]"
+            title="AI Terminal"
           >
             <Terminal className="w-4 h-4" />
           </button>
+
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-lg bg-white/[0.04] text-slate-300"
+            className="p-1.5 rounded-lg bg-white/[0.04] text-slate-300"
+            title="Menu"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
@@ -137,6 +158,64 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="sm:hidden border-t border-[#1E293B] bg-[#080B10] px-5 py-6 space-y-4 animate-in slide-in-from-top">
+          {/* Mobile Language Selector Box */}
+          <div className="p-3.5 rounded-2xl bg-[#0F1523] border border-[#1E293B] space-y-2.5 notranslate">
+            <div className="text-[11px] font-mono-code text-slate-400 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-white font-semibold">
+                <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
+                <span>Google Translate</span>
+              </span>
+              <span className="text-[#34A853]">मराठी • हिंदी</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs font-mono-code">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  document.cookie = 'googtrans=/en/en; path=/;';
+                  document.cookie = `googtrans=/en/en; path=/; domain=${window.location.hostname};`;
+                  localStorage.setItem('codagram_language', 'en');
+                  const s = document.querySelector('.goog-te-combo') as HTMLSelectElement | null;
+                  if (s) { s.value = 'en'; s.dispatchEvent(new Event('change', { bubbles: true })); }
+                  else { window.location.reload(); }
+                }}
+                className="py-2 px-1 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-center text-white border border-white/[0.08]"
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  document.cookie = 'googtrans=/en/mr; path=/;';
+                  document.cookie = `googtrans=/en/mr; path=/; domain=${window.location.hostname};`;
+                  localStorage.setItem('codagram_language', 'mr');
+                  const s = document.querySelector('.goog-te-combo') as HTMLSelectElement | null;
+                  if (s) { s.value = 'mr'; s.dispatchEvent(new Event('change', { bubbles: true })); }
+                  else { window.location.reload(); }
+                }}
+                className="py-2 px-1 rounded-xl bg-[#34A853]/15 border border-[#34A853]/40 text-[#34A853] text-center font-bold"
+              >
+                मराठी
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  document.cookie = 'googtrans=/en/hi; path=/;';
+                  document.cookie = `googtrans=/en/hi; path=/; domain=${window.location.hostname};`;
+                  localStorage.setItem('codagram_language', 'hi');
+                  const s = document.querySelector('.goog-te-combo') as HTMLSelectElement | null;
+                  if (s) { s.value = 'hi'; s.dispatchEvent(new Event('change', { bubbles: true })); }
+                  else { window.location.reload(); }
+                }}
+                className="py-2 px-1 rounded-xl bg-[#FBBC05]/15 border border-[#FBBC05]/40 text-[#FBBC05] text-center font-bold"
+              >
+                हिंदी
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-2 text-xs font-mono-code uppercase tracking-wider">
             {navLinks.map((link) => (
               <a

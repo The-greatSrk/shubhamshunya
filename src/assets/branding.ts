@@ -1,6 +1,6 @@
 import shunyaCoverImg from './images/shunya_book_cover_1791971522411.jpg';
 import shunya3dBookImg from './images/shunya_3d_book_mockup_1791974828476.jpg';
-import founderImg from './images/founder_shubham_kasar_1791971543955.jpg';
+import founderImg from './images/shubham_kasar_linkedin_1792075522125.jpg';
 
 export const ASSETS = {
   shunyaCover: shunyaCoverImg,

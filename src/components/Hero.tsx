@@ -153,7 +153,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApply, onExploreShunya, onOpen
             className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#0F1523] border border-[#1E293B] shadow-sm hover:border-[#4285F4] transition-all group"
           >
             <div className="relative w-6 h-6 rounded-full overflow-hidden border border-white/20 bg-black">
-              <img src={founderPhoto} alt="Shubham Kasar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+              <img src={founderPhoto || ASSETS.founderPhoto} alt="Shubham Kasar" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
             </div>
             <span className="text-xs font-mono-code text-white font-medium">Shubham Kasar</span>
             <div className="flex items-center gap-0.5">

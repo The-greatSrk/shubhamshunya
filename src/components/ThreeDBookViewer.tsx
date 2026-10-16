@@ -2,9 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, 
   RotateCw, 
-  Upload, 
   RefreshCw, 
-  Check, 
   ExternalLink, 
   Eye, 
   Layers, 
@@ -13,7 +11,6 @@ import {
   BookOpen,
   Info
 } from 'lucide-react';
-import { useLiveAssets } from '../utils/customAssets';
 import { ASSETS } from '../assets/branding';
 
 interface ThreeDBookViewerProps {
@@ -22,20 +19,10 @@ interface ThreeDBookViewerProps {
 }
 
 export const ThreeDBookViewer: React.FC<ThreeDBookViewerProps> = ({ onBuyBook, onOpenExcerpt }) => {
-  const { 
-    bookCover, 
-    hasCustomBook, 
-    saveBookCover, 
-    resetBookCover, 
-    default3dBook, 
-    default2dCover 
-  } = useLiveAssets();
-
   // Mode: 'studio3d' (photorealistic 3D render) or 'interactive3d' (CSS 3D dimensional mesh)
   const [viewMode, setViewMode] = useState<'studio3d' | 'interactive3d'>('studio3d');
   const [autoRotate, setAutoRotate] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   // Mouse tilt angles for Studio 3D view
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50 });
@@ -119,39 +106,14 @@ export const ThreeDBookViewer: React.FC<ThreeDBookViewerProps> = ({ onBuyBook, o
     };
   }, [isDragging]);
 
-  // Handle uploading 2D Photo / PDF
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadStatus(`Converting ${file.name} to 3D...`);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        saveBookCover(dataUrl);
-        setUploadStatus(`Successfully converted "${file.name}" to 3D!`);
-        setTimeout(() => setUploadStatus(null), 4000);
-      }
-    };
-    reader.onerror = () => {
-      setUploadStatus('Failed to read file. Please try again.');
-    };
-    reader.readAsDataURL(file);
+  const handleResetOrientation = () => {
+    setRotY(-25);
+    setRotX(10);
+    setTilt({ x: 0, y: 0, glareX: 50, glareY: 50 });
   };
 
   return (
     <div className="relative group max-w-md w-full mx-auto select-none">
-      {/* Hidden file input for uploading 2D cover / PDF */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        className="hidden"
-        onChange={handleFileUpload}
-      />
-
       {/* Atmospheric Google Neon Halo glow */}
       <div className="absolute -inset-4 bg-gradient-to-r from-[#4285F4]/20 via-[#FBBC05]/20 to-[#34A853]/20 blur-3xl opacity-60 group-hover:opacity-90 transition-opacity duration-700 pointer-events-none rounded-3xl" />
 
@@ -198,33 +160,15 @@ export const ThreeDBookViewer: React.FC<ThreeDBookViewerProps> = ({ onBuyBook, o
             )}
 
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handleResetOrientation}
               className="p-1.5 rounded-lg border border-[#1E293B] hover:border-[#4285F4] text-slate-300 hover:text-white bg-[#0F1523] transition-colors flex items-center gap-1"
-              title="Upload your 2D photo or PDF to convert into 3D"
+              title="Reset 3D camera angle"
             >
-              <Upload className="w-3.5 h-3.5 text-[#4285F4]" />
-              <span className="hidden sm:inline text-[10px]">Upload 2D</span>
+              <RefreshCw className="w-3.5 h-3.5 text-[#4285F4]" />
+              <span className="hidden sm:inline text-[10px]">Reset Angle</span>
             </button>
           </div>
         </div>
-
-        {/* Upload feedback banner */}
-        {uploadStatus && (
-          <div className="p-2 rounded-lg bg-[#0F1523] border border-[#34A853]/40 text-[#34A853] text-xs font-mono-code flex items-center justify-between animate-in fade-in">
-            <span className="flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5" />
-              {uploadStatus}
-            </span>
-            {hasCustomBook && (
-              <button
-                onClick={resetBookCover}
-                className="text-[10px] text-slate-400 hover:text-white underline ml-2"
-              >
-                Reset Default
-              </button>
-            )}
-          </div>
-        )}
 
         {/* 3D VIEWPORT CONTAINER */}
         <div
@@ -253,7 +197,7 @@ export const ThreeDBookViewer: React.FC<ThreeDBookViewerProps> = ({ onBuyBook, o
               {/* Studio 3D Book Mockup Image */}
               <div className="relative max-h-full max-w-[85%] rounded-lg shadow-2xl drop-shadow-[0_25px_35px_rgba(0,0,0,0.85)] overflow-hidden">
                 <img
-                  src={bookCover}
+                  src={ASSETS.shunya3dBook}
                   alt="Shunya: Sat Chit Anand 3D Hardcover by Shubham Kasar"
                   className="w-full h-full object-contain filter contrast-105"
                 />
@@ -299,7 +243,7 @@ export const ThreeDBookViewer: React.FC<ThreeDBookViewerProps> = ({ onBuyBook, o
                 style={{
                   transform: 'translateZ(18px)',
                   transformStyle: 'preserve-3d',
-                  backgroundImage: `url(${hasCustomBook ? bookCover : default3dBook})`,
+                  backgroundImage: `url(${ASSETS.shunyaCover})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                 }}

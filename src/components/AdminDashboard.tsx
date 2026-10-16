@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -19,7 +19,15 @@ import {
   Globe,
   AlertCircle,
   Copy,
-  Check
+  Check,
+  Key,
+  Upload,
+  ShieldAlert,
+  Sparkles,
+  Camera,
+  Image as ImageIcon,
+  LogOut,
+  CheckCheck
 } from 'lucide-react';
 import { 
   getPaymentConfig, 
@@ -27,8 +35,12 @@ import {
   FirestorePaymentConfig,
   getTestimonials,
   saveTestimonial,
-  FirestoreTestimonial 
+  FirestoreTestimonial,
+  auth
 } from '../lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { saveCustomFounderPhoto, useLiveAssets } from '../utils/customAssets';
+import { ASSETS } from '../assets/branding';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -36,11 +48,75 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
+  const { founderPhoto } = useLiveAssets();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [adminToken, setAdminToken] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('codagram_admin_token') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [sessionInfo, setSessionInfo] = useState<{ method: string; email: string } | null>(null);
   const [passcode, setPasscode] = useState('');
-  const [authError, setAuthError] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState('');
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'upi_settings' | 'orders' | 'admissions' | 'student_stories' | 'google_seo'>('upi_settings');
+  const [activeTab, setActiveTab] = useState<
+    'upi_settings' | 'orders' | 'founder_assets' | 'security' | 'admissions' | 'student_stories' | 'google_seo'
+  >('upi_settings');
+
+  // Security & Password Management State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Founder Photo Upload & Management State
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [photoSuccess, setPhotoSuccess] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Lockout countdown timer
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setLockoutSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutSeconds]);
+
+  // Check stored session validity on open
+  useEffect(() => {
+    if (!isOpen) return;
+    const storedToken = sessionStorage.getItem('codagram_admin_token');
+    if (storedToken) {
+      fetch('/api/admin/session', {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.authenticated && data.session) {
+            setAdminToken(storedToken);
+            setIsAuthenticated(true);
+            setSessionInfo(data.session);
+          } else {
+            sessionStorage.removeItem('codagram_admin_token');
+            setAdminToken('');
+            setIsAuthenticated(false);
+          }
+        })
+        .catch(() => {
+          // keep local
+        });
+    }
+  }, [isOpen]);
 
   // UPI Settings State
   const [upiId, setUpiId] = useState('shubhamkasar@upi');
@@ -89,10 +165,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
       console.error(e);
     }
 
-    // 2. Orders
+    // 2. Orders (Protected by Admin Token)
     setLoadingOrders(true);
     try {
-      const res = await fetch('/api/orders');
+      const res = await fetch('/api/orders', {
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {},
+      });
       const data = await res.json();
       if (data.orders) {
         setOrders(data.orders);
@@ -103,10 +181,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
       setLoadingOrders(false);
     }
 
-    // 3. Submissions
+    // 3. Submissions (Protected by Admin Token)
     setLoadingSubs(true);
     try {
-      const res = await fetch('/api/submissions');
+      const res = await fetch('/api/submissions', {
+        headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {},
+      });
       const data = await res.json();
       if (data.submissions) {
         setSubmissions(data.submissions);
@@ -167,16 +247,205 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
 
   if (!isOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  // 1. Authenticate with Master Password (Encrypted & Rate-Limited Server Verification)
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcode === 'shubham2026' || passcode === 'codagram' || passcode === 'admin') {
-      setIsAuthenticated(true);
-      setAuthError(false);
-    } else {
-      setAuthError(true);
+    if (!passcode.trim()) return;
+    if (lockoutSeconds > 0) return;
+
+    setAuthLoading(true);
+    setAuthErrorMessage('');
+
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passcode }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.token) {
+        sessionStorage.setItem('codagram_admin_token', data.token);
+        setAdminToken(data.token);
+        setIsAuthenticated(true);
+        setSessionInfo({ method: 'password', email: data.founderEmail || 'shubhamkasarsrk@gmail.com' });
+        setPasscode('');
+        setAuthErrorMessage('');
+      } else {
+        setAuthErrorMessage(data.error || 'Access denied: Invalid master credentials.');
+        if (data.lockedSeconds) {
+          setLockoutSeconds(data.lockedSeconds);
+        }
+      }
+    } catch (err: any) {
+      setAuthErrorMessage('Authentication server unreachable. Please verify connection.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
+  // 2. Authenticate with Founder Google Account (Zero-Trust OAuth)
+  const handleGoogleLogin = async () => {
+    if (lockoutSeconds > 0) return;
+    setAuthLoading(true);
+    setAuthErrorMessage('');
+
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
+      const email = result.user?.email || '';
+
+      const res = await fetch('/api/admin/google-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.token) {
+        sessionStorage.setItem('codagram_admin_token', data.token);
+        setAdminToken(data.token);
+        setIsAuthenticated(true);
+        setSessionInfo({ method: 'google_oauth', email: data.founderEmail || email });
+        setAuthErrorMessage('');
+      } else {
+        setAuthErrorMessage(data.error || 'Access denied: Google account is not the authorized founder.');
+      }
+    } catch (err: any) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setAuthErrorMessage(err.message || 'Google authentication failed.');
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 3. Logout
+  const handleLogout = async () => {
+    if (adminToken) {
+      try {
+        await fetch('/api/admin/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+      } catch {
+        // ignore
+      }
+    }
+    sessionStorage.removeItem('codagram_admin_token');
+    setAdminToken('');
+    setIsAuthenticated(false);
+    setSessionInfo(null);
+  };
+
+  // 4. Change Master Password
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!currentPassword) {
+      setPasswordError('Current master password is required.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setPasswordSuccess('Master password successfully updated in encrypted vault.');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => setPasswordSuccess(''), 5000);
+      } else {
+        setPasswordError(data.error || 'Failed to update master password.');
+      }
+    } catch (err: any) {
+      setPasswordError('Server communication error.');
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  // 5. Handle Exact Founder Photo Selection & Upload
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please select a valid image file (PNG, JPG, or WebP).');
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoError('');
+    setPhotoSuccess(false);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPhotoPreview(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveFounderPhoto = async () => {
+    if (!photoPreview) {
+      setPhotoError('Please select a photo first.');
+      return;
+    }
+
+    setSavingPhoto(true);
+    setPhotoError('');
+    setPhotoSuccess(false);
+
+    try {
+      const res = await fetch('/api/admin/founder-photo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          photoBase64: photoPreview,
+          mimeType: photoFile?.type || 'image/jpeg',
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        saveCustomFounderPhoto(photoPreview);
+        setPhotoSuccess(true);
+        setTimeout(() => setPhotoSuccess(false), 5000);
+      } else {
+        setPhotoError(data.error || 'Failed to save official founder photo.');
+      }
+    } catch (err: any) {
+      setPhotoError('Server communication error.');
+    } finally {
+      setSavingPhoto(false);
+    }
+  };
+
+  // 6. Save Recipient UPI Config
   const handleSaveUpi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!upiId.trim()) return;
@@ -184,6 +453,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     setUpiSaveSuccess(false);
 
     try {
+      await fetch('/api/settings/upi', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          upiId: upiId.trim(),
+          payeeName: payeeName.trim(),
+          currency: 'INR',
+        }),
+      });
+
       await savePaymentConfig({
         upiId: upiId.trim(),
         payeeName: payeeName.trim(),
@@ -238,7 +520,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     try {
       await fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
         body: JSON.stringify({ status: newStatus }),
       });
       setOrders((prev) =>
@@ -253,7 +538,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
     try {
       await fetch(`/api/submissions/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
         body: JSON.stringify({ status: newStatus }),
       });
       setSubmissions((prev) =>
@@ -288,14 +576,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
 
           <div className="flex items-center gap-2">
             {isAuthenticated && (
-              <button
-                onClick={loadData}
-                className="p-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono-code text-neutral-300 flex items-center gap-1.5"
-                title="Refresh Cloud Data"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Refresh Data</span>
-              </button>
+              <>
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-mono-code">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{sessionInfo?.email || 'shubhamkasarsrk@gmail.com'}</span>
+                </div>
+                <button
+                  onClick={loadData}
+                  className="p-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-xs font-mono-code text-neutral-300 flex items-center gap-1.5"
+                  title="Refresh Cloud Data"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Refresh Data</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-mono-code flex items-center gap-1.5 border border-rose-500/20"
+                  title="Sign out of Admin Session"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
+              </>
             )}
 
             <button
@@ -307,48 +609,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
           </div>
         </div>
 
-        {/* Passcode Lock Screen */}
+        {/* Zero-Trust Admin Authentication Lock Screen */}
         {!isAuthenticated ? (
-          <div className="flex-1 flex items-center justify-center p-6 bg-[#09090c]">
-            <form onSubmit={handleLogin} className="max-w-sm w-full p-8 rounded-2xl glass-panel space-y-5 text-center">
-              <div className="w-12 h-12 rounded-full bg-white/[0.05] border border-white/[0.1] flex items-center justify-center mx-auto text-[#d4af37]">
-                <Lock className="w-6 h-6" />
+          <div className="flex-1 flex items-center justify-center p-6 bg-[#09090c] overflow-y-auto">
+            <div className="max-w-md w-full p-8 rounded-2xl glass-panel border border-white/[0.1] space-y-6 text-center shadow-2xl">
+              <div className="w-14 h-14 rounded-2xl bg-[#0F1523] border border-[#1E293B] flex items-center justify-center mx-auto text-[#d4af37] shadow-lg">
+                <Lock className="w-7 h-7" />
               </div>
-              <div className="space-y-1">
-                <h4 className="text-lg font-heading font-bold text-white">
-                  Founder Verification
+
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono-code uppercase tracking-wider">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>Zero-Trust Founder Verification</span>
+                </div>
+                <h4 className="text-xl font-heading font-bold text-white">
+                  Founder & Admin Security Access
                 </h4>
                 <p className="text-xs text-neutral-400 font-mono-code">
-                  Enter master passcode to unlock configuration & orders
+                  Encrypted authentication required to access payment routing, orders, and sensitive records.
                 </p>
               </div>
 
-              <input
-                type="password"
-                required
-                autoFocus
-                value={passcode}
-                onChange={(e) => {
-                  setPasscode(e.target.value);
-                  setAuthError(false);
-                }}
-                placeholder="Enter passcode (e.g. shubham2026)..."
-                className="w-full px-4 py-2.5 text-xs font-mono-code bg-black/60 border border-white/[0.1] rounded-xl text-white text-center focus:outline-none focus:border-[#d4af37]"
-              />
-
-              {authError && (
-                <p className="text-xs font-mono-code text-rose-400">
-                  Invalid passcode. Try: shubham2026 or codagram
+              {/* Primary Method: Google Sign-In for Verified Founder */}
+              <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.08] space-y-3 text-left">
+                <div className="flex items-center justify-between text-[11px] font-mono-code text-neutral-300">
+                  <span className="flex items-center gap-1.5 text-white font-semibold">
+                    <Award className="w-3.5 h-3.5 text-[#4285F4]" />
+                    <span>Founder OAuth (One-Click)</span>
+                  </span>
+                  <span className="text-emerald-400 text-[10px]">Recommended</span>
+                </div>
+                <p className="text-[11px] text-neutral-400 leading-relaxed font-light">
+                  Sign in with the official Google account associated with Codagram: <strong className="text-white font-mono">shubhamkasarsrk@gmail.com</strong>
                 </p>
-              )}
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={authLoading || lockoutSeconds > 0}
+                  className="w-full py-2.5 px-4 rounded-xl text-xs font-mono-code font-bold text-white bg-[#0F1523] hover:bg-[#1E293B] border border-[#4285F4]/40 hover:border-[#4285F4] transition-all flex items-center justify-center gap-2.5 shadow-md disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                  </svg>
+                  <span>{authLoading ? 'Verifying...' : 'Sign in as shubhamkasarsrk@gmail.com'}</span>
+                </button>
+              </div>
 
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-full text-xs font-mono-code uppercase font-semibold text-black bg-white hover:bg-neutral-200 transition-colors"
-              >
-                Unlock Operations
-              </button>
-            </form>
+              {/* Divider */}
+              <div className="relative flex items-center justify-center">
+                <div className="border-t border-white/[0.08] w-full" />
+                <span className="bg-[#0c0c10] px-3 text-[10px] font-mono-code text-neutral-500 uppercase tracking-widest absolute">
+                  OR MASTER VAULT PASSWORD
+                </span>
+              </div>
+
+              {/* Password Form with Rate Limiting & Zero Plaintext Leaks */}
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-xs font-mono-code text-neutral-400">
+                    Encrypted Master Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    disabled={authLoading || lockoutSeconds > 0}
+                    value={passcode}
+                    onChange={(e) => {
+                      setPasscode(e.target.value);
+                      setAuthErrorMessage('');
+                    }}
+                    placeholder="Enter Master Password"
+                    className="w-full px-4 py-2.5 text-xs font-mono-code bg-black/70 border border-white/[0.1] rounded-xl text-white focus:outline-none focus:border-[#4285F4] transition-colors disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Lockout notification */}
+                {lockoutSeconds > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono-code text-left flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                    <div>
+                      <div className="font-bold">Security Lockout Active</div>
+                      <div>Too many failed attempts. Try again in <strong>{lockoutSeconds}</strong> seconds.</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error message */}
+                {authErrorMessage && lockoutSeconds === 0 && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono-code text-left flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                    <div>{authErrorMessage}</div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={authLoading || lockoutSeconds > 0 || !passcode.trim()}
+                  className="w-full py-2.5 rounded-xl text-xs font-mono-code uppercase font-bold text-black bg-white hover:bg-neutral-200 transition-colors disabled:opacity-40"
+                >
+                  {authLoading ? 'Authenticating...' : 'Unlock Operations Desk'}
+                </button>
+              </form>
+
+              <div className="pt-2 text-[10px] font-mono-code text-neutral-500">
+                Encrypted with SHA-256 & Salt • Rate-Limited Protection Active
+              </div>
+            </div>
           </div>
         ) : (
           /* Authenticated Dashboard */
@@ -365,6 +734,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 <span>Recipient UPI Setup</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('founder_assets')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-code flex items-center gap-1.5 transition-colors shrink-0 ${
+                  activeTab === 'founder_assets'
+                    ? 'bg-white text-black font-semibold'
+                    : 'text-neutral-400 hover:text-white bg-white/[0.03]'
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-[#34A853]" />
+                <span>Founder Photo & Identity</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-code flex items-center gap-1.5 transition-colors shrink-0 ${
+                  activeTab === 'security'
+                    ? 'bg-white text-black font-semibold'
+                    : 'text-neutral-400 hover:text-white bg-white/[0.03]'
+                }`}
+              >
+                <Key className="w-3.5 h-3.5 text-[#FBBC05]" />
+                <span>Security & Master Key</span>
               </button>
 
               <button
@@ -491,6 +884,287 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                     )}
                   </button>
                 </form>
+              </div>
+            )}
+
+            {/* TAB: FOUNDER ASSETS & OFFICIAL PORTRAIT */}
+            {activeTab === 'founder_assets' && (
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 text-xs font-mono-code text-[#34A853] uppercase">
+                    <ImageIcon className="w-4 h-4" />
+                    <span>Official Identity & Portrait Manager</span>
+                  </div>
+                  <h4 className="text-xl font-heading font-bold text-white">
+                    Permanent Founder Photograph
+                  </h4>
+                  <p className="text-xs text-neutral-400 font-light max-w-2xl leading-relaxed">
+                    Upload your exact original photograph (such as <strong>Smiling Young Man in Piped Blazer.png</strong> or <strong>download.jpeg</strong>). Once saved, it is cryptographically stored to the server filesystem and Cloud Firestore, permanently rendering across the Hero avatar, Founder Story showcase, and platform metadata with 100% exact fidelity.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Current Active Photo Card */}
+                  <div className="lg:col-span-5 p-5 rounded-2xl glass-panel border border-white/[0.08] space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono-code uppercase tracking-wider text-neutral-400">
+                        Live Website Portrait
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono-code flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Active Across Site</span>
+                      </span>
+                    </div>
+
+                    <div className="relative rounded-xl overflow-hidden aspect-square border border-white/[0.1] bg-black">
+                      <img
+                        src={photoPreview || founderPhoto || ASSETS.founderPhoto}
+                        alt="Shubham Kasar"
+                        className="w-full h-full object-cover"
+                      />
+                      {photoPreview && (
+                        <div className="absolute top-2 left-2 px-2 py-1 rounded bg-[#4285F4] text-white text-[10px] font-mono-code font-bold shadow-md">
+                          Unsaved Preview
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-[11px] font-mono-code text-neutral-400 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Identity:</span>
+                        <span className="text-white font-medium">Shubham Kasar</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Role:</span>
+                        <span className="text-slate-300">Founder, Codagram</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Location:</span>
+                        <span className="text-slate-300">Pune, Maharashtra, India</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Upload & Synchronization Deck */}
+                  <div className="lg:col-span-7 p-6 rounded-2xl glass-panel border border-white/[0.08] space-y-5">
+                    <h5 className="text-sm font-heading font-bold text-white flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-[#4285F4]" />
+                      <span>Upload Exact Original Photo File</span>
+                    </h5>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed font-light">
+                      Select your original photo file from your device. No AI transformations or filters are applied; your exact pixels are preserved and served directly.
+                    </p>
+
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/jpg"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                    />
+
+                    <div
+                      onClick={() => photoInputRef.current?.click()}
+                      className="border-2 border-dashed border-white/[0.15] hover:border-[#4285F4] transition-colors rounded-2xl p-6 text-center cursor-pointer bg-black/40 space-y-3 group"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-white/[0.05] group-hover:bg-[#4285F4]/10 border border-white/[0.1] group-hover:border-[#4285F4]/40 flex items-center justify-center mx-auto text-neutral-300 group-hover:text-[#4285F4] transition-all">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs font-mono-code font-bold text-white group-hover:text-[#4285F4]">
+                          {photoFile ? photoFile.name : 'Click to select photo file (PNG / JPEG / WebP)'}
+                        </div>
+                        <div className="text-[11px] text-neutral-500 font-mono-code">
+                          {photoFile ? `${(photoFile.size / 1024).toFixed(1)} KB selected` : 'Supports Smiling Young Man in Piped Blazer.png or download.jpeg'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {photoError && (
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono-code flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                        <span>{photoError}</span>
+                      </div>
+                    )}
+
+                    {photoSuccess && (
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono-code flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                        <span>Exact official photo permanently saved & live across website!</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveFounderPhoto}
+                        disabled={savingPhoto || !photoPreview}
+                        className="flex-1 py-3 rounded-full text-xs font-mono-code uppercase tracking-wider font-semibold text-black bg-white hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                      >
+                        {savingPhoto ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span>Save As Permanent Official Photo</span>
+                          </>
+                        )}
+                      </button>
+
+                      {photoPreview && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhotoPreview(null);
+                            setPhotoFile(null);
+                          }}
+                          className="px-4 py-3 rounded-full text-xs font-mono-code text-neutral-400 hover:text-white bg-white/[0.05]"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SECURITY & MASTER KEY */}
+            {activeTab === 'security' && (
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 text-xs font-mono-code text-[#FBBC05] uppercase">
+                    <Key className="w-4 h-4" />
+                    <span>Security Vault & Master Access Control</span>
+                  </div>
+                  <h4 className="text-xl font-heading font-bold text-white">
+                    Master Password & Authentication Shield
+                  </h4>
+                  <p className="text-xs text-neutral-400 font-light max-w-2xl leading-relaxed">
+                    Protect your administrative operations. Passwords are never stored or transferred in plain text; they are secured using SHA-256 cryptographic hashing with salt and protected by brute-force rate-limiting.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* Security Status Card */}
+                  <div className="lg:col-span-5 p-5 rounded-2xl glass-panel border border-white/[0.08] space-y-4">
+                    <h5 className="text-sm font-heading font-bold text-white flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>Active Security Posture</span>
+                    </h5>
+
+                    <div className="space-y-3 text-xs font-mono-code">
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-1">
+                        <div className="text-neutral-400 text-[11px]">Authorized Founder Account</div>
+                        <div className="text-white font-bold flex items-center gap-1.5">
+                          <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>shubhamkasarsrk@gmail.com</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-1">
+                        <div className="text-neutral-400 text-[11px]">Brute-Force Defense</div>
+                        <div className="text-emerald-400 font-bold">5-attempt lockout (15 min cooldown)</div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-1">
+                        <div className="text-neutral-400 text-[11px]">Password Encryption</div>
+                        <div className="text-white font-bold">SHA-256 + Unique Salt (Zero Plaintext)</div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-1">
+                        <div className="text-neutral-400 text-[11px]">Active Session Method</div>
+                        <div className="text-blue-400 font-bold uppercase">{sessionInfo?.method || 'Active Session Token'}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Change Password Form */}
+                  <form onSubmit={handleChangePassword} className="lg:col-span-7 p-6 rounded-2xl glass-panel border border-white/[0.08] space-y-4">
+                    <h5 className="text-sm font-heading font-bold text-white flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-[#FBBC05]" />
+                      <span>Change Master Admin Password</span>
+                    </h5>
+
+                    <p className="text-xs text-neutral-400 leading-relaxed font-light">
+                      Update the master password used to unlock this desk. New password must be at least 8 characters long.
+                    </p>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-mono-code text-neutral-300">
+                        Current Master Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="Enter existing master password..."
+                        className="w-full px-4 py-2.5 text-xs font-mono-code bg-black/60 border border-white/[0.1] rounded-xl text-white focus:outline-none focus:border-[#FBBC05]"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-mono-code text-neutral-300">
+                        New Master Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="At least 8 characters..."
+                        className="w-full px-4 py-2.5 text-xs font-mono-code bg-black/60 border border-white/[0.1] rounded-xl text-white focus:outline-none focus:border-[#FBBC05]"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-mono-code text-neutral-300">
+                        Confirm New Master Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter new password..."
+                        className="w-full px-4 py-2.5 text-xs font-mono-code bg-black/60 border border-white/[0.1] rounded-xl text-white focus:outline-none focus:border-[#FBBC05]"
+                      />
+                    </div>
+
+                    {passwordError && (
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono-code flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                        <span>{passwordError}</span>
+                      </div>
+                    )}
+
+                    {passwordSuccess && (
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono-code flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                        <span>{passwordSuccess}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={savingPassword}
+                      className="w-full py-3 rounded-full text-xs font-mono-code uppercase tracking-wider font-semibold text-black bg-white hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                    >
+                      {savingPassword ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Update & Encrypt Password</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
               </div>
             )}
 

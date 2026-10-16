@@ -1,28 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { Compass, Sparkles, Terminal, BookOpen, Layers, Target, ShieldCheck, ExternalLink, Award, Code2, Camera, Upload, Check, RefreshCw } from 'lucide-react';
+import React from 'react';
+import { Compass, Sparkles, Terminal, BookOpen, Layers, Target, ShieldCheck, ExternalLink, Award, Code2, CheckCircle2 } from 'lucide-react';
 import { ASSETS } from '../assets/branding';
 import { useLiveAssets } from '../utils/customAssets';
 
 export const AboutShubham: React.FC = () => {
-  const { founderPhoto, hasCustomFounder, saveFounderPhoto, resetFounderPhoto } = useLiveAssets();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        saveFounderPhoto(dataUrl);
-        setUploadNotice(`Updated founder photo to "${file.name}"!`);
-        setTimeout(() => setUploadNotice(null), 4000);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
+  const { founderPhoto } = useLiveAssets();
   const narrativePillars = [
     {
       year: 'THE GENESIS',
@@ -115,20 +97,20 @@ export const AboutShubham: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-xs font-mono-code text-white font-bold flex items-center gap-2">
-                    <span>Rank #1 on Google for Shubham Kasar Codagram</span>
+                    <span>Shubham Ratan Kasar — CEO & FOUNDER @CODAGRAM</span>
                     <span className="w-2 h-2 rounded-full bg-[#34A853]" />
                   </div>
                   <div className="text-[11px] font-mono-code text-slate-400">
-                    Verified LinkedIn Profile • Knowledge Graph Connected
+                    Official LinkedIn Profile (650+ followers) • Pune, Maharashtra
                   </div>
                 </div>
               </div>
 
               <a
-                href="https://www.linkedin.com/in/shubhamkasar"
+                href="https://in.linkedin.com/in/shubham-kasar-ba050323b"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0077B5]/15 hover:bg-[#0077B5]/25 border border-[#0077B5]/40 text-[#0077B5] text-xs font-mono-code font-semibold transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0077B5]/15 hover:bg-[#0077B5]/25 border border-[#0077B5]/40 text-[#0077B5] text-xs font-mono-code font-semibold transition-colors shadow-sm"
               >
                 <span>View LinkedIn</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -138,98 +120,53 @@ export const AboutShubham: React.FC = () => {
 
           {/* Founder Portrait & Worldview Matrix */}
           <div className="lg:col-span-5 space-y-6">
-            {/* Hidden file input for founder photo upload */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handlePhotoUpload}
-            />
-
-            {/* Founder Portrait Card with Google Neon Accents */}
+            {/* Founder Permanent Portrait Card with Google Neon Accents */}
             <div className="p-4 sm:p-5 rounded-2xl bg-[#0F1523] border border-[#1E293B] space-y-4 shadow-xl glow-google-multi">
-              {uploadNotice && (
-                <div className="p-2.5 rounded-xl bg-[#080B10] border border-[#34A853]/50 text-[#34A853] text-xs font-mono-code flex items-center justify-between animate-in fade-in">
-                  <span className="flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5" />
-                    {uploadNotice}
-                  </span>
-                  {hasCustomFounder && (
-                    <button
-                      onClick={resetFounderPhoto}
-                      className="text-[10px] text-slate-400 hover:text-white underline ml-2"
-                    >
-                      Reset Default
-                    </button>
-                  )}
-                </div>
-              )}
-
               <div className="relative rounded-xl overflow-hidden aspect-square border border-white/[0.08] group bg-black">
                 <img
-                  src={founderPhoto}
-                  alt="Shubham Kasar — Founder of Codagram and Author of Shunya"
+                  src={founderPhoto || ASSETS.founderPhoto}
+                  alt="Shubham Kasar — Founder of Codagram and Author of Shunya: Sat Chit Anand"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#080B10] via-transparent to-transparent opacity-85" />
                 
-                {/* Upload or Swap Photo Action Button */}
+                {/* Official Verified Founder Badge */}
                 <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-2 rounded-xl bg-[#080B10]/80 hover:bg-[#080B10] border border-white/20 hover:border-[#4285F4] text-white text-xs font-mono-code backdrop-blur-md transition-all flex items-center gap-1.5 shadow-lg group-hover:border-[#4285F4]"
-                    title="Upload your photo (e.g. download.jpeg)"
-                  >
-                    <Camera className="w-3.5 h-3.5 text-[#4285F4]" />
-                    <span className="hidden sm:inline text-[11px]">Upload Photo</span>
-                  </button>
-
-                  {hasCustomFounder && (
-                    <button
-                      onClick={resetFounderPhoto}
-                      className="p-2 rounded-xl bg-[#080B10]/80 hover:bg-[#080B10] border border-white/20 hover:border-[#EA4335] text-slate-300 hover:text-[#EA4335] text-xs font-mono-code backdrop-blur-md transition-all shadow-lg"
-                      title="Reset to default portrait"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <div className="px-2.5 py-1 rounded-xl bg-[#080B10]/90 border border-[#34A853]/40 text-[#34A853] text-[11px] font-mono-code backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#34A853]" />
+                    <span>Verified Founder</span>
+                  </div>
                 </div>
 
-                {/* Overlay Founder Badge */}
-                <div className="absolute bottom-3 left-3 right-3 p-3 rounded-xl bg-[#080B10]/85 backdrop-blur-md border border-white/[0.1] space-y-1">
+                {/* Overlay Founder Credentials */}
+                <div className="absolute bottom-3 left-3 right-3 p-3.5 rounded-xl bg-[#080B10]/90 backdrop-blur-md border border-white/[0.1] space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-heading font-bold text-white uppercase tracking-wider">
+                    <span className="text-sm font-heading font-black text-white uppercase tracking-wider">
                       SHUBHAM KASAR
                     </span>
                     <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-[#4285F4]" />
-                      <span className="w-2 h-2 rounded-full bg-[#EA4335]" />
-                      <span className="w-2 h-2 rounded-full bg-[#FBBC05]" />
-                      <span className="w-2 h-2 rounded-full bg-[#34A853]" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#4285F4]" title="Google Blue" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#EA4335]" title="Google Red" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#FBBC05]" title="Google Yellow" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#34A853]" title="Google Green" />
                     </div>
                   </div>
                   <p className="text-[11px] font-mono-code text-slate-300 flex items-center justify-between">
                     <span>Founder, Codagram • Author, Shunya</span>
-                    {hasCustomFounder && (
-                      <span className="text-[#34A853] text-[10px]">Active Custom Photo</span>
-                    )}
+                    <span className="text-[#4285F4] text-[10px] font-semibold">Pune, India</span>
                   </p>
                 </div>
               </div>
 
-              {/* Photo prompt hint for user */}
+              {/* Permanent Verification & Identity Proof Footer */}
               <div className="pt-1 flex items-center justify-between text-[11px] font-mono-code text-slate-400">
-                <span className="flex items-center gap-1 text-slate-400">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#34A853]" />
-                  Verified Identity
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <ShieldCheck className="w-4 h-4 text-[#34A853]" />
+                  <span>Permanent Official Portrait</span>
                 </span>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-[#4285F4] hover:underline"
-                >
-                  Swap Photo (download.jpeg)
-                </button>
+                <span className="text-slate-400 text-[10px]">
+                  Codagram Headquarters
+                </span>
               </div>
             </div>
 
