@@ -6,4 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
-.rag-cache/
+.rag-cache/*
+!.rag-cache/index.json

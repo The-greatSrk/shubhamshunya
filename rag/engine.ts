@@ -200,8 +200,13 @@ export async function buildIndex(ai: GoogleGenAI | null): Promise<{ chunks: numb
       const batch = missing.slice(i, i + 50);
       const vecs = await embed(ai, batch.map((c) => c.text), 'RETRIEVAL_DOCUMENT', true);
       batch.forEach((c, j) => (cache[c.id] = vecs[j]));
-      fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
-      fs.writeFileSync(CACHE_FILE, JSON.stringify({ model: EMBED_MODEL, vectors: cache }));
+      // Saving is best-effort: on a read-only filesystem (e.g. Vercel) the embeddings still stay in memory.
+      try {
+        fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+        fs.writeFileSync(CACHE_FILE, JSON.stringify({ model: EMBED_MODEL, vectors: cache }));
+      } catch (e: any) {
+        console.warn('RAG: could not save the embedding cache (read-only filesystem?):', e.message);
+      }
       console.log(`RAG: embedded ${Math.min(i + 50, missing.length)}/${missing.length} new chunks`);
     }
     for (const c of chunks) c.embedding = cache[c.id];

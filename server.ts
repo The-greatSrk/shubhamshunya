@@ -34,7 +34,9 @@ let firebaseApp: any = null;
 let firestoreDb: any = null;
 
 try {
-  const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+  // __dirname differs once the server is bundled into a serverless function, so also try the project root.
+  const configPath = [path.resolve(__dirname, 'firebase-applet-config.json'), path.resolve(process.cwd(), 'firebase-applet-config.json')]
+    .find((p) => fs.existsSync(p)) || path.resolve(__dirname, 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     firebaseApp = getApps().length > 0 ? getApp() : initializeApp(rawConfig);
@@ -492,6 +494,9 @@ app.post('/api/admin/founder-photo', requireAdminAuth, async (req: Request, res:
     const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '');
     const buffer = Buffer.from(base64Data, 'base64');
 
+    // Disk copies are best-effort: on a read-only filesystem (e.g. Vercel) they fail, and the photo must still
+    // be saved to Firestore below.
+    try {
     // 1. Save to assets directory
     const imagesDir = path.resolve(__dirname, 'src', 'assets', 'images');
     if (!fs.existsSync(imagesDir)) {
@@ -515,6 +520,10 @@ app.post('/api/admin/founder-photo', requireAdminAuth, async (req: Request, res:
           }
         }
       }
+    }
+
+    } catch (diskErr) {
+      console.warn('Could not write founder photo to disk (read-only filesystem?); continuing with Firestore:', diskErr);
     }
 
     // 3. Save as data URL
@@ -1532,4 +1541,14 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.VERCEL) {
+  // Serverless: Vercel serves the built frontend (dist/) itself and calls the exported app per request,
+  // so there is no listener or dev server to start. Load the RAG index (cached embeddings ship with the deploy).
+  buildIndex(getGeminiClient())
+    .then((i) => console.log(`Shunya RAG index ready: ${i.chunks} chunks, embeddings ${i.embedded ? 'on' : 'off (lexical only)'}`))
+    .catch((e) => console.warn('Shunya RAG index failed:', e.message));
+} else {
+  startServer();
+}
+
+export default app;
