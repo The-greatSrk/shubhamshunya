@@ -9,14 +9,8 @@ import {
   BrainCircuit, 
   Terminal as TerminalIcon, 
   RefreshCw, 
-  Check, 
-  Copy, 
   ExternalLink,
-  Sliders,
-  Layers,
-  ArrowRight,
   ShieldCheck,
-  Zap,
   CornerDownLeft
 } from 'lucide-react';
 import { ChatMessage } from '../types';
@@ -153,13 +147,13 @@ Type "help" to see available commands or type any direct question.
   // ==========================================
   // 2. MULTI-TURN AI CHAT STATE
   // ==========================================
-  const [chatRole, setChatRole] = useState<'codagram_advisor' | 'shunya_philosopher' | 'general_assistant'>('codagram_advisor');
+  const [chatRole, setChatRole] = useState<'codagram_advisor' | 'shunya_philosopher' | 'general_assistant'>('shunya_philosopher');
   const [modelPreference, setModelPreference] = useState<'fast' | 'general' | 'complex'>('general');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Welcome to Shubham Kasar\'s Digital Headquarters AI. I am tuned to Codagram\'s capability-first curriculum and the consciousness philosophy of "Shunya: Sat Chit Anand". How can I guide your journey today?',
+      content: 'Hello! 🙏 Chat with me casually, or ask about "Shunya: Sat Chit Anand", Codagram (tracks, fees, admissions) or Shubham Kasar. I answer only from the material I have, and I\'ll tell you honestly if I don\'t know.',
       timestamp: 'Just now',
     },
   ]);
@@ -217,7 +211,7 @@ Type "help" to see available commands or type any direct question.
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: 'Codagram intelligence is processing at peak capacity. Connect directly with Shubham at shubhamkasarsrk@gmail.com.',
+            content: data.error || 'I could not answer that right now. You can reach Shubham directly at shubhamkasarsrk@gmail.com.',
             timestamp: 'Just now',
           },
         ]);
@@ -241,7 +235,12 @@ Type "help" to see available commands or type any direct question.
   // 3. HIGH THINKING STATE (Argon)
   // ==========================================
   const [thinkQuery, setThinkQuery] = useState('');
-  const [thinkResult, setThinkResult] = useState<string | null>(null);
+  const [thinkResult, setThinkResult] = useState<{
+    answer: string;
+    grounded: boolean;
+    citations: { n: number; source: string; excerpt: string }[];
+    quotes: string[];
+  } | null>(null);
   const [thinkLoading, setThinkLoading] = useState(false);
 
   const handleRunThinking = async (queryText?: string) => {
@@ -251,22 +250,28 @@ Type "help" to see available commands or type any direct question.
     setThinkResult(null);
 
     try {
-      const res = await fetch('/api/gemini/think', {
+      const res = await fetch('/api/companion/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: q,
-          domain: 'Shubham Kasar Philosophy & Deep Systems Architecture',
-        }),
+        body: JSON.stringify({ query: q }),
       });
       const data = await res.json();
-      if (data.analysis) {
-        setThinkResult(data.analysis);
-      } else {
-        setThinkResult('Analytical model synthesized first-principles response.');
+      if (!res.ok || typeof data.answer !== 'string') {
+        throw new Error(data.error || 'Request failed');
       }
+      setThinkResult({
+        answer: data.answer,
+        grounded: !!data.grounded,
+        citations: data.citations || [],
+        quotes: data.quotes || [],
+      });
     } catch (err: any) {
-      setThinkResult(`Synthesis completed via fallback engine.`);
+      setThinkResult({
+        answer: 'The companion could not be reached right now. Please try again in a moment.',
+        grounded: false,
+        citations: [],
+        quotes: [],
+      });
     } finally {
       setThinkLoading(false);
     }
@@ -713,10 +718,10 @@ Type "help" to see available commands or type any direct question.
               <div className="p-4 rounded-xl bg-[#0F1523] border border-[#EA4335]/30 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-mono-code text-[#EA4335]">
                   <BrainCircuit className="w-4 h-4" />
-                  <span className="font-bold">gemini-4-argon • High Reasoning Engine</span>
+                  <span className="font-bold">Shunya Companion • Answers only from the book</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Engages first-principles analytical synthesis across engineering architecture, consciousness inquiry, and philosophical deconstruction.
+                  Retrieves the relevant passages from <em>Shunya: Sat Chit Anand</em> and answers strictly from them, with sources. If the book does not cover your question, it says so instead of guessing.
                 </p>
               </div>
 
@@ -765,12 +770,31 @@ Type "help" to see available commands or type any direct question.
               {thinkResult && (
                 <div className="p-5 rounded-xl bg-[#05070B] border border-[#1E293B] space-y-3 animate-in fade-in">
                   <div className="flex items-center justify-between border-b border-[#1E293B] pb-2 text-xs font-mono-code text-slate-400">
-                    <span className="text-[#EA4335] font-semibold">Analytical Synthesis</span>
-                    <span>High Reasoning Mode</span>
+                    <span className="text-[#EA4335] font-semibold">Companion</span>
+                    <span>{thinkResult.grounded ? 'Grounded in the book' : 'Not found in the book'}</span>
                   </div>
                   <div className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
-                    {thinkResult}
+                    {thinkResult.answer}
                   </div>
+                  {thinkResult.quotes.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      {thinkResult.quotes.map((q, i) => (
+                        <blockquote key={i} className="border-l-2 border-[#FBBC05] pl-3 text-sm italic text-slate-300">
+                          “{q}”
+                        </blockquote>
+                      ))}
+                    </div>
+                  )}
+                  {thinkResult.citations.length > 0 && (
+                    <div className="pt-3 border-t border-[#1E293B] space-y-2">
+                      <div className="text-[11px] font-mono-code uppercase tracking-wider text-slate-500">Sources</div>
+                      {thinkResult.citations.map((c) => (
+                        <div key={c.n} className="text-xs text-slate-400 leading-relaxed">
+                          <span className="text-slate-300 font-semibold">[{c.n}] {c.source}</span> — {c.excerpt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

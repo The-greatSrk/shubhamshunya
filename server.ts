@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { askCompanion, buildIndex, ragStatus, smallTalkReply } from './rag/engine';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, 
@@ -1039,180 +1040,60 @@ app.post('/api/seo/verify', async (req: Request, res: Response) => {
 // RESILIENT FOUNDER INTELLIGENCE & GEMINI ENDPOINTS
 // ==========================================
 
-function generateFounderIntelligenceFallback(query: string, role: string): string {
-  const q = query.toLowerCase();
-
-  // Codagram / Courses / Curriculum / Learning
-  if (q.includes('codagram') || q.includes('course') || q.includes('curriculum') || q.includes('track') || q.includes('fee') || q.includes('admission') || q.includes('enroll') || q.includes('placement')) {
-    return `### Codagram: Education Rebuilt Around Capability
-
-Codagram was founded by **Shubham Kasar** in Pune with a radical conviction: **Capability over certificates. Always.**
-
-Traditional colleges charge 4 years of tuition only to hand graduates paper degrees with zero production readiness. At Codagram, we follow a sovereign builder pipeline:
-**Student → Learning → Real Projects → Capability → Opportunity → Independence.**
-
-#### Active Engineering Tracks:
-1. **High-Performance Distributed Systems & Go** (Consensus protocols, Raft, Kafka architecture, microservice orchestration)
-2. **Autonomous Multi-Agent AI & LLM Systems** (Gemini 2.5/3, Tool Calling, RAG pipelines, latency optimization)
-3. **Resilient Production Full-Stack Infrastructure** (React, TypeScript, Node/Go, Docker, Kubernetes, zero-downtime CI/CD)
-4. **Frontier Bio-Computing & Neural Interfaces** (Genomic sequencing pipelines, molecular visualization)
-
-#### Admissions & Pricing:
-- **Affordable Registration:** ₹1,999 commitment fee to cover infrastructure & server slots.
-- **Fair Model:** No crippling upfront debt. Outcome-aligned incentives where you build real client and open-source proofs of work.
-- **Instant Enrollment:** You can register directly on this portal via dynamic UPI QR (GPay, PhonePe, Paytm).`;
+// Shunya Philosophical Companion (RAG: answers only from knowledge/shunya, with citations)
+app.post('/api/companion/ask', async (req: Request, res: Response) => {
+  const { query, history } = req.body || {};
+  if (typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Query is required' });
   }
-
-  // Shunya / Book / Philosophy / Consciousness
-  if (q.includes('shunya') || q.includes('sat chit anand') || q.includes('book') || q.includes('read') || q.includes('kindle') || q.includes('consciousness') || q.includes('zero') || q.includes('philosophy')) {
-    return `### Shunya: Sat Chit Anand — By Shubham Kasar
-
-*"What remains when there is nothing left to prove?"*
-
-*Shunya* (शून्य) is not an academic lecture or dry textbook. It is Shubham Kasar's honest recording of confronting ambition, borrowed identities, existential fear, and the search for authentic freedom.
-
-#### Core Insights:
-- **Freedom from Borrowed Identity:** Most of human anxiety comes from performing for an audience that doesn't really see you. Freedom starts when you realize you never needed to become anyone to exist.
-- **Consciousness Over Ego:** The discovery of *Sat Chit Anand* (Truth, Consciousness, Bliss) as the silent witness behind passing mental turbulence.
-- **Action Without Attachment (Samarpan):** Pour relentless devotion and *shiddat* into your craft and code, without making societal applause or money the prison of your mind.
-- **The Power of Zero:** Zero is not empty absence; it is the fertile ground from which all creation emerges.
-
-#### Availability:
-- **Amazon Kindle:** Available digitally worldwide.
-- **Official Print Editions:** Paperback (₹499) and Collector's Hardcover (₹799) with author inscription can be purchased instantly via UPI on this website.`;
+  if (query.length > 1000) {
+    return res.status(400).json({ error: 'Query is too long (max 1000 characters)' });
   }
-
-  // Shubham Kasar / Founder / Story / LinkedIn / Contact
-  if (q.includes('shubham') || q.includes('kasar') || q.includes('founder') || q.includes('who are you') || q.includes('story') || q.includes('linkedin') || q.includes('background')) {
-    return `### Shubham Kasar — Founder & Author
-
-Shubham Kasar is a software architect, author, and educator based in Pune, India. 
-
-- **Founder of Codagram:** An alternative engineering academy training engineers through intense production systems rather than rote theory.
-- **Author of "Shunya: Sat Chit Anand":** A philosophical work on consciousness, ego detachment, and inner sovereignty.
-- **Worldview:** *"Build everything. Depend on nothing."* Combining high-leverage technology outside with profound consciousness within.
-- **LinkedIn:** [in.linkedin.com/in/shubham-kasar-ba050323b](https://in.linkedin.com/in/shubham-kasar-ba050323b) — Official LinkedIn Profile (650+ followers), CEO & Founder @ Codagram.
-- **Direct Dialogue:** You can request a 1-on-1 counsel session via the "Talk to Shubham" section or email directly at \`shubhamkasarsrk@gmail.com\`.`;
+  const safeHistory = Array.isArray(history)
+    ? history
+        .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .slice(-6)
+        .map((m: any) => ({ role: m.role, content: m.content.slice(0, 2000) }))
+    : [];
+  try {
+    const result = await askCompanion(getGeminiClient(), query.trim(), safeHistory);
+    res.json(result);
+  } catch (err: any) {
+    console.error('Companion error:', err);
+    res.status(500).json({ error: 'The companion could not answer right now. Please try again.' });
   }
+});
 
-  // Student Testimonials / Proof of Work / Hiring
-  if (q.includes('student') || q.includes('success') || q.includes('testimonial') || q.includes('hire') || q.includes('talent')) {
-    return `### Verified Student Transformation & Capability
+app.post('/api/companion/reindex', requireAdminAuth, async (_req: Request, res: Response) => {
+  const info = await buildIndex(getGeminiClient());
+  res.json({ ...info, ...ragStatus() });
+});
 
-Codagram rejects fake placement percentages and bought reviews. Our fellows prove their competence through verifiable code:
-
-- **Priya Sharma** (Tier-3 College → Razorpay): Built a high-throughput distributed ledger with Raft consensus handling 10k req/sec.
-- **Rohan Kulkarni** (Self-taught → Autonomous Agent Engineer @ Flipkart): Architected an agentic workflow with real-time vector search and tool-calling.
-- **Ananya Deshmukh** (Freelance Fullstack → Systems Architect): Deployed multi-tenant Kubernetes clusters with automatic failover.
-
-Companies can hire directly from our **Talent Network** tab—no placement fees, just engineers who push code to production on day one.`;
-  }
-
-  // UPI Payment / Ordering
-  if (q.includes('upi') || q.includes('pay') || q.includes('buy') || q.includes('order') || q.includes('gpay') || q.includes('phonepe')) {
-    return `### Seamless UPI Checkout
-
-You can complete instant payments directly on this website:
-1. Select any track (e.g., Codagram Fellowship Registration ₹1,999) or book edition (*Shunya Hardcover* ₹799, *Paperback* ₹499).
-2. The dynamic modal generates a verified UPI QR code.
-3. Open Google Pay, PhonePe, or Paytm and scan the QR or tap the deep link.
-4. Enter your 12-digit UTR transaction number to receive an immediate verifiable receipt stored in Firestore.`;
-  }
-
-  // Default articulate response
-  if (role === 'shunya_philosopher') {
-    return `Inquiry into: "${query}"
-
-When we strip away the noise of urgency, what is truly asking this question? 
-In *Shunya*, we observe that every question is often the mind trying to reach an imagined future state where it finally feels secure or accomplished. But the stillness you seek is already the ground beneath your current thought.
-
-Do what must be done with full *samarpan* (devotion). Build with rigor. Yet remain rooted in the unshakeable zero within.`;
-  }
-
-  return `Regarding your inquiry on "${query}":
-
-At Shubham Kasar's Digital Headquarters and Codagram, our philosophy is anchored in first principles:
-1. **Execution Over Credentials:** True sovereignty comes from what you can build and sustain, not what a piece of paper claims.
-2. **Consciousness Over Anxiety:** Approaching code, architecture, and life with deliberate presence rather than reactive fear.
-
-Feel free to ask about our engineering tracks, *Shunya: Sat Chit Anand*, admissions, or use the interactive terminal commands (\`help\`, \`bio\`, \`courses\`, \`shunya\`, \`testimonials\`).`;
-}
-
-// Chatbot Endpoint (Resilient Gemini + Founder Intelligence Fallback)
+// Chatbot Endpoint: greetings get a natural reply, everything else is answered from knowledge/ with citations
 app.post('/api/gemini/chat', async (req: Request, res: Response) => {
-  const { messages, role = 'codagram_advisor', modelPreference } = req.body;
+  const { messages } = req.body || {};
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Messages array is required' });
   }
 
-  const latestMsg = messages[messages.length - 1];
-  const userQuery = latestMsg?.content || '';
-
-  const aiClient = getGeminiClient();
-
-  if (aiClient) {
-    try {
-      let systemInstruction = '';
-      let selectedModel = 'gemini-3.8-flash';
-
-      if (role === 'codagram_advisor') {
-        systemInstruction = `You are the official Codagram Education Advisor AI at Shubham Kasar's Digital Headquarters in Pune.
-Codagram's philosophy: "Education, rebuilt around capability."
-Codagram does NOT sell certificates or generic video lectures. It connects:
-Student → Learning → Real Projects → Capability → Opportunity → Independence.
-Practical business model: Students learn with intense real-world execution, with low registration fees (₹1,999) and outcome-aligned incentives.
-Never make legally absolute guarantees like "guaranteed job". Emphasize capability, true work readiness, and direct connection to hiring partners.
-Tone: Direct, encouraging, honest, clear, no corporate fluff, grounded in engineering craftsmanship.`;
-        selectedModel = modelPreference === 'fast' ? 'gemini-3.1-flash-lite' : 'gemini-3.8-flash';
-      } else if (role === 'shunya_philosopher') {
-        systemInstruction = `You are the philosophical companion exploring the ideas of the book "Shunya: Sat Chit Anand" authored by Shubham Kasar.
-Core concepts:
-- "What remains when there is nothing left to prove?"
-- "You are not searching for the self. The self is searching through you."
-- "Freedom begins when you stop trying to become someone."
-- "Build everything. Depend on nothing."
-- "Achieve without becoming."
-- "Do your work with shiddat and samarpan, without making money the object of your existence."
-Tone: Meditative, reflective, gentle, probing, deeply respectful. Never act as a religious preacher or guru. Frame ideas as direct inquiries into awareness, expectation, fear, desire, and presence.`;
-        selectedModel = modelPreference === 'complex' ? 'gemini-4-argon' : 'gemini-3.8-flash';
-      } else {
-        systemInstruction = `You are the official digital assistant of Shubham Kasar + Codagram.
-Help visitors navigate Shubham's founder journey, Codagram learning tracks, Shunya book inquiries, talent hiring for companies, and speaking/press inquiries.
-Be concise, clear, and authentic. Never hallucinate fake awards or fake numbers.`;
-        selectedModel = 'gemini-3.1-flash-lite';
-      }
-
-      const contents = messages.map((m: { role: string; content: string }) => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      }));
-
-      const response = await aiClient.models.generateContent({
-        model: selectedModel,
-        contents,
-        config: {
-          systemInstruction,
-          temperature: role === 'shunya_philosopher' ? 0.8 : 0.6,
-        },
-      });
-
-      if (response.text) {
-        return res.json({
-          reply: response.text,
-          model: selectedModel,
-        });
-      }
-    } catch (apiError: any) {
-      console.warn('Gemini chat API error, switching to resilient founder intelligence fallback:', apiError.message);
-    }
+  const clean = messages
+    .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .map((m: any) => ({ role: m.role as string, content: m.content.slice(0, 2000) }));
+  const last = clean[clean.length - 1];
+  if (!last || last.role !== 'user' || !last.content.trim()) {
+    return res.status(400).json({ error: 'The last message must be a non-empty user message' });
   }
 
-  // Resilient founder intelligence response
-  const fallbackReply = generateFounderIntelligenceFallback(userQuery, role);
-  res.json({
-    reply: fallbackReply,
-    model: 'founder-intelligence-v2 (resilient engine)',
-  });
+  try {
+    const result = await askCompanion(getGeminiClient(), last.content.slice(0, 1000), clean.slice(0, -1));
+    const sources = result.mode === 'generated' && result.citations.length
+      ? '\n\nSources: ' + result.citations.map((c) => `[${c.n}] ${c.source}`).join(' · ')
+      : '';
+    return res.json({ reply: result.answer + sources, model: `rag (${result.mode})`, citations: result.citations });
+  } catch (err: any) {
+    console.error('Chat error:', err);
+    return res.status(500).json({ error: 'The assistant could not answer right now. Please try again.' });
+  }
 });
 
 // Dedicated CLI Terminal Command Endpoint
@@ -1363,11 +1244,19 @@ VERIFIED CAPABILITY PROOFS (REAL STUDENT OUTCOMES)
     case 'ask':
     default:
       const queryToAsk = cmd === 'ask' ? args : raw;
-      const answer = generateFounderIntelligenceFallback(queryToAsk, 'codagram_advisor');
-      return res.json({
-        output: answer,
-        status: 'success',
-      });
+      if (!queryToAsk.trim()) {
+        return res.json({ output: 'Say something, or type `help` for commands.', status: 'success' });
+      }
+      try {
+        const result = await askCompanion(getGeminiClient(), queryToAsk.slice(0, 1000), []);
+        const sources = result.mode === 'generated' && result.citations.length
+          ? '\n\nSources: ' + result.citations.map((c) => `[${c.n}] ${c.source}`).join(' · ')
+          : '';
+        return res.json({ output: result.answer + sources, status: 'success' });
+      } catch (err: any) {
+        console.error('Terminal companion error:', err);
+        return res.json({ output: 'Something went wrong answering that. Please try again.', status: 'error' });
+      }
   }
 });
 
@@ -1402,13 +1291,11 @@ app.post('/api/gemini/search', async (req: Request, res: Response) => {
   }
 
   // Fallback grounded answer
+  // No static stand-in: a canned answer would be the same for every prompt and is not live data.
   res.json({
-    text: `Pune Tech Corridor & Engineering Overview:
-The primary software engineering corridors in Pune include Hinjewadi IT Park (Phase 1, 2, 3) and Kharadi EON Free Zone, alongside Baner and Magarpatta Cybercity.
-High-demand capability areas include Distributed Systems (Go/Rust), Autonomous Agent Architectures, Cloud Native Infrastructure (Kubernetes/Docker), and Full-Stack TypeScript.
-Codagram focuses on building verified project portfolios that bridge engineering graduates directly into high-growth product teams.`,
+    text: 'Live web search needs a working Gemini API key on the server, so I cannot answer this right now.',
     groundingMetadata: null,
-    model: 'grounded-intelligence (resilient)',
+    model: 'unavailable',
   });
 });
 
@@ -1440,73 +1327,25 @@ app.post('/api/gemini/maps', async (req: Request, res: Response) => {
   }
 
   // Fallback maps response
+  // No static stand-in: a canned answer would be the same for every prompt and is not live data.
   res.json({
-    text: `Pune Geographical Intelligence:
-• Hinjewadi IT Park: Located in western Pune along the Mumbai-Bangalore Highway, home to Infosys, Wipro, Cognizant, and deep-tech startups.
-• Kharadi & Viman Nagar: Eastern tech corridor housing World Trade Center Pune and EON IT Park.
-• Academic Hubs: College of Engineering Pune (COEP), Pune Institute of Computer Technology (PICT), and MIT World Peace University are within 12-18km transit radius.
-• Codagram Learning Hub: Strategically connected to both western and central Pune corridors for easy student access.`,
+    text: 'Live maps lookup needs a working Gemini API key on the server, so I cannot answer this right now.',
     groundingMetadata: null,
-    model: 'maps-intelligence (resilient)',
+    model: 'unavailable',
   });
 });
 
-// High Thinking with gemini-4-argon (Resilient)
+// Kept for backwards compatibility: same grounded companion as /api/companion/ask
 app.post('/api/gemini/think', async (req: Request, res: Response) => {
-  const { query, domain } = req.body;
-  if (!query) return res.status(400).json({ error: 'Query is required' });
-
-  const aiClient = getGeminiClient();
-  if (aiClient) {
-    try {
-      const response = await aiClient.models.generateContent({
-        model: 'gemini-4-argon',
-        contents: query,
-        config: {
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.HIGH,
-          },
-          systemInstruction: `You are the Deep Analytical Engine for Shubham Kasar's ecosystem (${domain || 'Philosophy & High-Performance Engineering'}).
-Engage deep, first-principles reasoning. Dissect assumptions, explore multi-layered implications, avoid clichés, and deliver a masterwork synthesis.`,
-        },
-      });
-
-      return res.json({
-        analysis: response.text,
-        model: 'gemini-4-argon',
-        thinkingMode: 'HIGH',
-      });
-    } catch (error: any) {
-      console.warn('Gemini 4 Argon error, attempting 3.8-flash fallback:', error.message);
-      try {
-        const fallback = await aiClient.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: query,
-        });
-        return res.json({
-          analysis: fallback.text,
-          model: 'gemini-3.8-flash (fallback)',
-          thinkingMode: 'Standard High Reasoning',
-        });
-      } catch (fbErr) {}
-    }
+  const { query } = req.body || {};
+  if (typeof query !== 'string' || !query.trim()) return res.status(400).json({ error: 'Query is required' });
+  try {
+    const result = await askCompanion(getGeminiClient(), query.trim().slice(0, 1000), []);
+    res.json({ analysis: result.answer, model: `rag (${result.mode})`, citations: result.citations });
+  } catch (err: any) {
+    console.error('Think error:', err);
+    res.status(500).json({ error: 'The assistant could not answer right now.' });
   }
-
-  // Resilient Analytical Synthesis
-  res.json({
-    analysis: `### First-Principles Analytical Breakdown: "${query}"
-
-1. **Deconstruction of Core Premise:**
-   Modern education incentivizes outward signaling—credentials, certificates, and compliance—rather than intrinsic capability. When capability is absent, psychological insecurity inevitably follows, driving individuals to seek perpetual validation.
-
-2. **The Convergence of "Shunya" and Systems Engineering:**
-   In distributed systems, a node without fault-tolerance collapses under high load. Similarly, an individual whose identity depends on external approval collapses when confronted with career friction or existential uncertainty. *Shunya* provides the internal fault-tolerance: the realization that the observer is already complete.
-
-3. **Synthesis & Action:**
-   Build systems with unyielding craftsmanship (*shiddat*). Master fundamentals—memory management, concurrency, resilient communication. Yet hold zero psychological attachment to outcomes. This posture breeds genuine fearlessness and high-impact innovation.`,
-    model: 'first-principles-reasoning-engine (resilient)',
-    thinkingMode: 'First-Principles High Reasoning',
-  });
 });
 
 // Image Generation with gemini-3-pro-image-preview (Resilient)
@@ -1683,6 +1522,10 @@ async function startServer() {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
+
+  buildIndex(getGeminiClient())
+    .then((i) => console.log(`Shunya RAG index ready: ${i.chunks} chunks, embeddings ${i.embedded ? 'on' : 'off (lexical only)'}`))
+    .catch((e) => console.warn('Shunya RAG index failed:', e.message));
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Digital Headquarters running at http://0.0.0.0:${PORT}`);
