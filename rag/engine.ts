@@ -514,7 +514,22 @@ function cooldownFor(err: any): number {
 }
 
 // Try the main model, then a lighter one. A slow or overloaded model (503, hang) must not break the chat.
+// A slow or briefly overloaded model usually recovers within seconds, so try once more before giving up and
+// showing raw passages. Quota errors are NOT retried: waiting a few seconds cannot fix a used-up quota.
 async function generateWithFallback(ai: GoogleGenAI, params: any) {
+  try {
+    return await generateOnce(ai, params);
+  } catch (err: any) {
+    const msg = String(err?.message || '');
+    const quota = /429|RESOURCE_EXHAUSTED/.test(msg);
+    const transient = /timeout after|503|UNAVAILABLE|overloaded|high demand|ECONNRESET|fetch failed/i.test(msg);
+    if (quota || !transient) throw err;
+    console.warn('RAG: transient model failure, retrying once');
+    return await generateOnce(ai, params);
+  }
+}
+
+async function generateOnce(ai: GoogleGenAI, params: any) {
   const all = [...new Set([ANSWER_MODEL, FALLBACK_MODEL])];
   // Skip a model that failed recently so users aren't made to wait on it again (unless it is the only one).
   const healthy = all.filter((m) => (modelDownUntil.get(m) || 0) < Date.now());
