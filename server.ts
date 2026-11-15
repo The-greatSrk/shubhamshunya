@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
-import { askCompanion, buildIndex, ragStatus, smallTalkReply } from './rag/engine';
+import { askCompanion, buildIndex, ragStatus, smallTalkReply } from './rag/engine.js';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, 

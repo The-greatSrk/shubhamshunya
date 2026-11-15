@@ -8,3 +8,4 @@ coverage/
 !.env.example
 .rag-cache/*
 !.rag-cache/index.json
+.vercel
